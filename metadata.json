@@ -1,0 +1,7 @@
+{
+  "name": "Gemini AR Garden",
+  "description": "An AR experience where you plant seeds with your fingers and grow them with your smile. Includes Gemini-powered garden analysis.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
