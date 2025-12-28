@@ -6,7 +6,7 @@ import { StatusPanel, WorldControls } from './components/Controls';
 import { BiomeTheme, BIOME_COLORS, Flower, FlowerSpecies, Point, Seed } from './types';
 import { MdAutoAwesome } from "react-icons/md";
 
-const PINCH_THRESHOLD = 0.04; // Slightly more sensitive for better feel
+const PINCH_THRESHOLD = 0.04; 
 
 function App() {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -20,7 +20,7 @@ function App() {
   const isFistRef = useRef(false);
   const fistHoldFramesRef = useRef(0);
   
-  // Settings Refs
+  // Settings Refs for low-latency access in loop
   const biomeRef = useRef<BiomeTheme>(BiomeTheme.Sunset);
   const speciesRef = useRef<FlowerSpecies>(FlowerSpecies.Random);
   const growthHeightRef = useRef(1.0);
@@ -107,11 +107,12 @@ function App() {
 
     const width = canvas.width;
     const height = canvas.height;
-    const groundY = height - 80; // Fixed ground height for a stable AR floor
+    const groundY = height - 80;
 
     const results = visionService.detect(video);
     let pinching = false, mouthOpen = false, fist = false;
     
+    // Hand Logic
     if (results?.hands?.landmarks?.length > 0) {
       const landmarks = results.hands.landmarks[0];
       const thumb = landmarks[4], index = landmarks[8], wrist = landmarks[0];
@@ -119,22 +120,24 @@ function App() {
 
       if (Math.hypot(thumb.x - index.x, thumb.y - index.y) < PINCH_THRESHOLD) {
         pinching = true;
+        // Seed only once per pinch action
         if (!isPinchingRef.current) {
           seedsRef.current.push({
             id: Date.now().toString(),
             x: (thumb.x + index.x) / 2 * width,
             y: (thumb.y + index.y) / 2 * height,
-            vy: 5, color: '#FFFFFF'
+            vy: 4, color: '#FFFFFF'
           });
         }
       }
       const avgDist = tips.reduce((acc, t) => acc + Math.hypot(t.x - wrist.x, t.y - wrist.y), 0) / 4;
-      if (avgDist < 0.18) fist = true;
+      if (avgDist < 0.15) fist = true;
     }
 
+    // Face Logic
     if (results?.faces?.faceBlendshapes?.[0]) {
       const jaw = results.faces.faceBlendshapes[0].categories.find(b => b.categoryName === 'jawOpen')?.score || 0;
-      if (jaw > 0.22) mouthOpen = true;
+      if (jaw > 0.25) mouthOpen = true;
     }
 
     isPinchingRef.current = pinching;
@@ -143,64 +146,59 @@ function App() {
 
     if (fist) {
       fistHoldFramesRef.current++;
-      if (fistHoldFramesRef.current === 20) { flowersRef.current = []; seedsRef.current = []; }
+      if (fistHoldFramesRef.current === 25) { flowersRef.current = []; seedsRef.current = []; }
     } else fistHoldFramesRef.current = 0;
 
-    // Physics
-    seedsRef.current.forEach(s => { s.y += s.vy; s.vy += 0.6; });
+    // Physics & Growth
+    seedsRef.current.forEach(s => { s.y += s.vy; s.vy += 0.5; });
     const landing = seedsRef.current.filter(s => s.y >= groundY);
     landing.forEach(s => flowersRef.current.push(createFlower(s.x, groundY, biomeRef.current, speciesRef.current)));
     seedsRef.current = seedsRef.current.filter(s => s.y < groundY);
 
     flowersRef.current.forEach(f => {
-      f.y = groundY; 
       const targetMax = f.maxHeight * growthHeightRef.current;
-      const rate = mouthOpen ? 5.0 : 0.3; // Much faster growth when mouth is open
-      if (f.currentHeight < targetMax) f.currentHeight += rate;
-      else if (f.currentHeight > targetMax + 10) f.currentHeight -= 2.0;
+      // Mouth controls growth speed: 5.0 when open, 0.2 when closed
+      const rate = mouthOpen ? 5.5 : 0.2; 
       
-      if (f.currentHeight > targetMax * 0.6 && f.bloomProgress < 1) {
-        f.bloomProgress += mouthOpen ? 0.09 : 0.015;
+      if (f.currentHeight < targetMax) {
+        f.currentHeight += rate;
+      }
+      
+      if (f.currentHeight > targetMax * 0.5 && f.bloomProgress < 1) {
+        f.bloomProgress += mouthOpen ? 0.08 : 0.005;
       }
     });
 
-    // Draw
+    // Drawing
     ctx.clearRect(0, 0, width, height);
 
-    // Subtle Soil Line
+    // Soil Effect
     const soilGrad = ctx.createLinearGradient(0, groundY, 0, height);
-    soilGrad.addColorStop(0, 'rgba(236, 72, 153, 0.05)');
-    soilGrad.addColorStop(0.2, 'rgba(20, 10, 5, 0.4)');
-    soilGrad.addColorStop(1, 'rgba(0, 0, 0, 0.9)');
+    soilGrad.addColorStop(0, 'rgba(255, 255, 255, 0.1)');
+    soilGrad.addColorStop(0.1, 'rgba(0, 0, 0, 0.4)');
+    soilGrad.addColorStop(1, 'rgba(0, 0, 0, 0.8)');
     ctx.fillStyle = soilGrad;
     ctx.fillRect(0, groundY, width, height - groundY);
-    
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
-    ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(0, groundY); ctx.lineTo(width, groundY); ctx.stroke();
 
     flowersRef.current.forEach(f => drawFlower(ctx, f));
+    
+    // Draw Seeds with Glow
     seedsRef.current.forEach(s => { 
+      ctx.save();
       ctx.fillStyle = '#FFF'; 
-      ctx.shadowBlur = 10; ctx.shadowColor = 'rgba(255,255,255,0.8)';
-      ctx.beginPath(); ctx.arc(s.x, s.y, 4, 0, Math.PI * 2); ctx.fill();
-      ctx.shadowBlur = 0;
+      ctx.shadowBlur = 15; 
+      ctx.shadowColor = 'rgba(255,255,255,0.9)';
+      ctx.beginPath(); 
+      ctx.arc(s.x, s.y, 4, 0, Math.PI * 2); 
+      ctx.fill();
+      ctx.restore();
     });
 
-    if (pinching && results?.hands?.landmarks?.[0]) {
-      const t = results.hands.landmarks[0][4], i = results.hands.landmarks[0][8];
-      const px = (t.x + i.x)/2 * width;
-      const py = (t.y + i.y)/2 * height;
-      ctx.beginPath(); ctx.arc(px, py, 12, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(236, 72, 153, 0.5)'; ctx.fill();
-      ctx.shadowBlur = 15; ctx.shadowColor = 'rgba(236, 72, 153, 0.8)';
-      ctx.strokeStyle = 'white'; ctx.lineWidth = 2; ctx.stroke();
-      ctx.shadowBlur = 0;
-    }
-
+    // Update UI Indicators
     if (uiState.isPinching !== pinching || uiState.isMouthOpen !== mouthOpen || uiState.isFist !== fist) {
       setUiState({ isPinching: pinching, isMouthOpen: mouthOpen, isFist: fist });
     }
+    
     requestRef.current = requestAnimationFrame(animate);
   };
 
@@ -208,28 +206,48 @@ function App() {
     ctx.save();
     ctx.translate(f.x, f.y);
     const h = f.currentHeight;
-    ctx.beginPath(); ctx.moveTo(0, 0);
-    ctx.bezierCurveTo(f.stemControlPoints[1].x, -h * 0.33, f.stemControlPoints[2].x, -h * 0.66, f.stemControlPoints[3].x, -h);
-    ctx.lineWidth = 3; ctx.strokeStyle = '#8BC34A'; ctx.stroke();
     
+    // Stem
+    ctx.beginPath(); 
+    ctx.moveTo(0, 0);
+    ctx.bezierCurveTo(
+      f.stemControlPoints[1].x, -h * 0.33, 
+      f.stemControlPoints[2].x, -h * 0.66, 
+      f.stemControlPoints[3].x, -h
+    );
+    ctx.lineWidth = 4; 
+    ctx.strokeStyle = '#4CAF50'; 
+    ctx.stroke();
+    
+    // Bloom
     if (f.bloomProgress > 0) {
       ctx.translate(f.stemControlPoints[3].x, -h);
-      const scale = f.bloomProgress * (f.maxHeight / 200);
+      const scale = f.bloomProgress * (f.maxHeight / 220);
       ctx.scale(scale, scale);
+      
+      ctx.shadowBlur = 20;
+      ctx.shadowColor = f.color;
       ctx.fillStyle = f.color;
       
       if (f.species === FlowerSpecies.Daisy) {
-        ctx.fillStyle = '#FFD700'; ctx.beginPath(); ctx.arc(0, 0, 7, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#FFEB3B'; ctx.beginPath(); ctx.arc(0, 0, 8, 0, Math.PI * 2); ctx.fill();
         ctx.fillStyle = f.color;
-        for (let j = 0; j < 12; j++) { ctx.beginPath(); ctx.rotate((Math.PI * 2) / 12); ctx.ellipse(12, 0, 11, 4, 0, 0, Math.PI * 2); ctx.fill(); }
+        for (let j = 0; j < 10; j++) { 
+          ctx.beginPath(); ctx.rotate((Math.PI * 2) / 10); 
+          ctx.ellipse(14, 0, 12, 5, 0, 0, Math.PI * 2); ctx.fill(); 
+        }
       } else if (f.species === FlowerSpecies.Tulip) {
-        ctx.beginPath(); ctx.moveTo(0, 0); ctx.bezierCurveTo(15, -15, 15, -40, 0, -50); ctx.bezierCurveTo(-15, -40, -15, -15, 0, 0); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(0, 0); 
+        ctx.bezierCurveTo(18, -18, 18, -45, 0, -55); 
+        ctx.bezierCurveTo(-18, -45, -18, -18, 0, 0); 
+        ctx.fill();
       } else if (f.species === FlowerSpecies.Rose) {
-         ctx.beginPath(); ctx.arc(0, 0, 14, 0, Math.PI*2); ctx.fill();
-         ctx.fillStyle = f.secondaryColor; ctx.beginPath(); ctx.arc(3, -3, 10, 0, Math.PI*2); ctx.fill();
+         ctx.beginPath(); ctx.arc(0, 0, 16, 0, Math.PI*2); ctx.fill();
+         ctx.fillStyle = f.secondaryColor; 
+         ctx.beginPath(); ctx.arc(4, -4, 12, 0, Math.PI*2); ctx.fill();
       } else {
-        ctx.beginPath(); ctx.arc(0, 0, 14, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = f.secondaryColor; ctx.beginPath(); ctx.arc(0, 0, 8, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(0, 0, 15, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = f.secondaryColor; ctx.beginPath(); ctx.arc(0, 0, 9, 0, Math.PI * 2); ctx.fill();
       }
     }
     ctx.restore();
@@ -244,19 +262,15 @@ function App() {
 
   return (
     <div className="fixed inset-0 bg-black overflow-hidden select-none font-sans">
-      <div className="relative w-full h-full flex items-center justify-center">
-        {/* Fullscreen Video Background */}
+      <div className="relative w-full h-full">
         <video 
           ref={videoRef} 
           style={{ transform: `scaleX(-1)` }}
           className="absolute inset-0 w-full h-full object-cover" 
           playsInline muted 
         />
-
-        {/* AR Overlay Canvas */}
         <canvas ref={canvasRef} className="absolute inset-0 w-full h-full transform scale-x-[-1] pointer-events-none" />
 
-        {/* UI Controls */}
         <StatusPanel {...uiState} />
         <WorldControls 
           biome={biome} setBiome={setBiomeState}
@@ -269,24 +283,24 @@ function App() {
           <button onClick={handleAnalyze} disabled={isAnalyzing}
             className="group flex items-center gap-4 bg-white/10 hover:bg-white/20 backdrop-blur-xl border border-white/20 text-white px-8 py-4 rounded-full font-bold shadow-2xl transition-all active:scale-95 disabled:opacity-50">
             <MdAutoAwesome className={`text-xl text-pink-400 ${isAnalyzing ? "animate-spin" : "group-hover:rotate-12"}`} />
-            <span className="tracking-[0.2em] text-[10px] uppercase">{isAnalyzing ? "CONSULTING THE SPIRITS..." : "AI GARDEN ANALYSIS"}</span>
+            <span className="tracking-[0.2em] text-[10px] uppercase">{isAnalyzing ? "CONSULTING GARDEN SPIRITS..." : "AI GARDEN ANALYSIS"}</span>
           </button>
         </div>
 
         {analysisResult && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/60 backdrop-blur-md z-30 p-6">
-             <div className="bg-[#0a0a0a] p-10 rounded-3xl max-w-xl text-center border border-white/10 shadow-2xl relative">
-                <div className="absolute top-0 left-1/2 -translate-x-1/2 w-16 h-1 bg-pink-500 rounded-b-lg"></div>
-                <p className="text-white text-lg font-light leading-relaxed mb-8 italic">"{analysisResult}"</p>
-                <button onClick={() => setAnalysisResult(null)} className="px-10 py-3 bg-white text-black rounded-full font-bold text-[10px] tracking-widest uppercase hover:opacity-90">CLOSE</button>
+          <div className="absolute inset-0 flex items-center justify-center bg-black/70 backdrop-blur-md z-30 p-6">
+             <div className="bg-[#0f0f0f] p-10 rounded-3xl max-w-xl text-center border border-white/10 shadow-2xl relative">
+                <div className="absolute top-0 left-1/2 -translate-x-1/2 w-20 h-1 bg-pink-500 rounded-b-lg"></div>
+                <p className="text-white text-xl font-light leading-relaxed mb-8 italic">"{analysisResult}"</p>
+                <button onClick={() => setAnalysisResult(null)} className="px-10 py-3 bg-white text-black rounded-full font-bold text-[10px] tracking-widest uppercase hover:bg-gray-200 transition-colors">BACK TO GARDEN</button>
              </div>
           </div>
         )}
 
         {!loaded && (
            <div className="absolute inset-0 bg-black flex flex-col items-center justify-center text-white z-50">
-             <div className="w-12 h-12 border-2 border-white/10 border-t-pink-500 rounded-full animate-spin mb-6"></div>
-             <p className="tracking-[0.5em] text-[9px] font-black text-white/30 uppercase">Augmenting Reality</p>
+             <div className="w-16 h-16 border-2 border-white/5 border-t-pink-500 rounded-full animate-spin mb-6"></div>
+             <p className="tracking-[0.6em] text-[10px] font-black text-white/40 uppercase">Awakening Nature</p>
            </div>
         )}
       </div>
