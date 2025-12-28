@@ -3,16 +3,14 @@ import { visionService } from './services/visionService';
 import { analyzeGarden } from './services/geminiService';
 import { StatusPanel, WorldControls } from './components/Controls';
 import { BiomeTheme, BIOME_COLORS, Flower, FlowerSpecies, Point, Seed } from './types';
-import { clsx } from 'clsx';
 import { MdAutoAwesome } from "react-icons/md";
 
 // Constants
 const CANVAS_WIDTH = 1280;
 const CANVAS_HEIGHT = 720;
 const PINCH_THRESHOLD = 0.05;
-const MOUTH_OPEN_THRESHOLD = 0.05; // Diff between lips
 const GRAVITY = 8;
-const GROUND_LEVEL_Y = 0.9; // Percentage of screen height
+const GROUND_LEVEL_Y = 0.85; // Percentage of screen height
 
 function App() {
   // Refs
@@ -25,14 +23,16 @@ function App() {
   const [cameras, setCameras] = useState<MediaDeviceInfo[]>([]);
   const [selectedCamera, setSelectedCamera] = useState<string>('');
   
-  // Game State
+  // Game State Refs (Mutable for performance)
   const seedsRef = useRef<Seed[]>([]);
   const flowersRef = useRef<Flower[]>([]);
   const isPinchingRef = useRef(false);
   const isMouthOpenRef = useRef(false);
   const isFistRef = useRef(false);
+  const fistHoldFramesRef = useRef(0);
   
-  // Interaction State for UI
+  // UI Sync State (Ref to check diffs, State to trigger render)
+  const uiStateRef = useRef({ isPinching: false, isMouthOpen: false, isFist: false });
   const [uiState, setUiState] = useState({
     isPinching: false,
     isMouthOpen: false,
@@ -100,8 +100,8 @@ function App() {
     // Bezier control points for a natural wavy stem
     const stemPoints: Point[] = [
       { x: 0, y: 0 }, // Base (relative)
-      { x: (Math.random() - 0.5) * 40, y: -50 },
-      { x: (Math.random() - 0.5) * 40, y: -100 },
+      { x: (Math.random() - 0.5) * 60, y: -50 },
+      { x: (Math.random() - 0.5) * 60, y: -100 },
       { x: 0, y: -150 } // Top (relative)
     ];
 
@@ -109,8 +109,8 @@ function App() {
       id: Math.random().toString(36).substr(2, 9),
       x,
       y,
-      maxHeight: 150 + Math.random() * 200,
-      currentHeight: 10,
+      maxHeight: 180 + Math.random() * 250,
+      currentHeight: 5,
       bloomProgress: 0,
       species: spec === FlowerSpecies.Random 
         ? Object.values(FlowerSpecies).filter(s => s !== 'RANDOM')[Math.floor(Math.random() * 5)] 
@@ -140,17 +140,17 @@ function App() {
       const landmarks = results.hands.landmarks[0];
       const thumbTip = landmarks[4];
       const indexTip = landmarks[8];
-      const middleTip = landmarks[12];
-      const ringTip = landmarks[16];
-      const pinkyTip = landmarks[20];
       const wrist = landmarks[0];
+      const tips = [landmarks[8], landmarks[12], landmarks[16], landmarks[20]]; // Index, Middle, Ring, Pinky
 
       // Pinch Detection (Thumb + Index)
       const pinchDist = Math.hypot(thumbTip.x - indexTip.x, thumbTip.y - indexTip.y);
       if (pinchDist < PINCH_THRESHOLD) {
         pinching = true;
         
-        // Spawn seed if not previously pinching (trigger once)
+        // Spawn seed logic
+        // Only spawn on "fresh" pinch or periodically if held? 
+        // Let's do: spawn one immediately on pinch start.
         if (!isPinchingRef.current) {
           const seedX = (thumbTip.x + indexTip.x) / 2 * CANVAS_WIDTH;
           const seedY = (thumbTip.y + indexTip.y) / 2 * CANVAS_HEIGHT;
@@ -159,148 +159,144 @@ function App() {
             id: Date.now().toString(),
             x: seedX,
             y: seedY,
-            vy: 2, // Initial velocity
+            vy: 4, // Initial velocity down
             color: '#FFFFFF'
           });
         }
       }
 
-      // Fist Detection (Simplified: All fingertips close to wrist/palm center)
-      // Checking if fingertips are lower (higher Y) than usual extension relative to wrist
-      // Or simply distance from wrist < threshold
-      const tips = [indexTip, middleTip, ringTip, pinkyTip];
+      // Fist Detection
+      // Check average distance of fingertips to wrist.
+      // Open hand: fingers far from wrist (~0.4 - 0.6). Closed fist: fingers close (~0.2).
       const avgDistToWrist = tips.reduce((acc, t) => acc + Math.hypot(t.x - wrist.x, t.y - wrist.y), 0) / 4;
       
-      if (avgDistToWrist < 0.25) { // Threshold for "curled" hand
+      if (avgDistToWrist < 0.22) { 
         fist = true;
-        if (!isFistRef.current) {
-          // Clear Garden
-          flowersRef.current = [];
-          seedsRef.current = [];
-        }
       }
     }
 
+    // Mouth Detection
     if (results?.faces && results.faces.faceBlendshapes.length > 0) {
-      // Use blendshapes for more accurate mouth open detection if available
       const blendshapes = results.faces.faceBlendshapes[0].categories;
       const jawOpen = blendshapes.find(b => b.categoryName === 'jawOpen')?.score || 0;
-      
-      if (jawOpen > 0.2) {
+      if (jawOpen > 0.25) {
         mouthOpen = true;
       }
     }
 
-    // Update Refs
+    // Update Logic State
     isPinchingRef.current = pinching;
     isMouthOpenRef.current = mouthOpen;
     isFistRef.current = fist;
 
-    // Throttled UI update (don't update React state every frame)
-    if (Math.random() < 0.1) {
-        setUiState({ isPinching: pinching, isMouthOpen: mouthOpen, isFist: fist });
+    // Fist Hold Logic (Prevent accidental clears)
+    if (fist) {
+      fistHoldFramesRef.current++;
+      if (fistHoldFramesRef.current > 10 && fistHoldFramesRef.current < 12) { // Trigger once after holding
+         flowersRef.current = [];
+         seedsRef.current = [];
+      }
+    } else {
+      fistHoldFramesRef.current = 0;
     }
 
-    // 3. Physics & Growth Update
+    // 3. UI Sync (Instant update if changed)
+    const newUiState = { isPinching: pinching, isMouthOpen: mouthOpen, isFist: fist };
+    if (
+        newUiState.isPinching !== uiStateRef.current.isPinching ||
+        newUiState.isMouthOpen !== uiStateRef.current.isMouthOpen ||
+        newUiState.isFist !== uiStateRef.current.isFist
+    ) {
+        setUiState(newUiState);
+        uiStateRef.current = newUiState;
+    }
+
+    // 4. Physics & Growth Update
+    const groundY = CANVAS_HEIGHT * GROUND_LEVEL_Y;
+
     // Seeds
     seedsRef.current.forEach(seed => {
       seed.y += seed.vy;
-      seed.vy += 0.5; // Gravity acceleration
+      seed.vy += 0.5; // Gravity
     });
 
-    // Remove seeds that hit ground and spawn flowers
-    const groundY = CANVAS_HEIGHT * GROUND_LEVEL_Y;
-    
-    // Filter seeds that are still falling
     const fallingSeeds = seedsRef.current.filter(s => s.y < groundY);
-    
-    // Seeds that hit ground
     const plantingSeeds = seedsRef.current.filter(s => s.y >= groundY);
     plantingSeeds.forEach(seed => {
       flowersRef.current.push(createFlower(seed.x, groundY, biome, species));
     });
-    
     seedsRef.current = fallingSeeds;
 
-    // Grow Flowers
+    // Flowers
     flowersRef.current.forEach(flower => {
       const targetMax = flower.maxHeight * growthHeight;
-      
-      // Mouth open accelerates growth significantly
-      const growthRate = mouthOpen ? 3.0 : 0.1; 
+      const growthRate = mouthOpen ? 4.0 : 0.2; // Faster growth when mouth open
       
       if (flower.currentHeight < targetMax) {
         flower.currentHeight += growthRate;
-      } else if (flower.currentHeight > targetMax) {
-        flower.currentHeight -= 1.0; // Shrink if slider moved down
+      } else if (flower.currentHeight > targetMax + 5) {
+        flower.currentHeight -= 2.0; // Shrink back down smoothly
       }
 
-      // Bloom only if near full height
-      if (flower.currentHeight > targetMax * 0.8) {
+      // Bloom logic
+      if (flower.currentHeight > targetMax * 0.7) {
+        // Only bloom if mouth is open or it's fully grown
+        const bloomSpeed = mouthOpen ? 0.08 : 0.01;
         if (flower.bloomProgress < 1) {
-          flower.bloomProgress += (mouthOpen ? 0.05 : 0.005);
+          flower.bloomProgress += bloomSpeed;
         }
       }
     });
 
-
-    // 4. Rendering
+    // 5. Rendering
     ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
-    // Draw Soil
+    // Draw Transparent Land
+    // A slight gradient from the bottom
     const gradient = ctx.createLinearGradient(0, groundY, 0, CANVAS_HEIGHT);
-    gradient.addColorStop(0, 'rgba(80, 50, 30, 0.8)');
-    gradient.addColorStop(1, 'rgba(40, 20, 10, 0.95)');
+    gradient.addColorStop(0, 'rgba(60, 40, 30, 0.4)');
+    gradient.addColorStop(1, 'rgba(20, 10, 5, 0.9)');
     ctx.fillStyle = gradient;
     ctx.fillRect(0, groundY, CANVAS_WIDTH, CANVAS_HEIGHT - groundY);
     
-    // Draw soil top border
-    ctx.strokeStyle = '#8B5A2B';
-    ctx.lineWidth = 4;
+    // Ground Line
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+    ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(0, groundY);
     ctx.lineTo(CANVAS_WIDTH, groundY);
     ctx.stroke();
 
-    // Draw Flowers
-    flowersRef.current.forEach(flower => {
-      drawFlower(ctx, flower);
-    });
+    // Flowers
+    flowersRef.current.forEach(flower => drawFlower(ctx, flower));
 
-    // Draw Falling Seeds
-    ctx.fillStyle = '#FFF';
+    // Seeds
     seedsRef.current.forEach(seed => {
+      ctx.fillStyle = '#FFF';
       ctx.beginPath();
       ctx.arc(seed.x, seed.y, 4, 0, Math.PI * 2);
       ctx.fill();
-      // Glow trail
       ctx.shadowBlur = 10;
-      ctx.shadowColor = biome === BiomeTheme.Sunset ? '#FF0' : '#FFF';
+      ctx.shadowColor = '#FFF';
       ctx.fill();
       ctx.shadowBlur = 0;
     });
 
-    // Draw Landmarks (Visual Feedback)
+    // Visual Feedback for Hand
     if (results?.hands && results.hands.landmarks.length > 0) {
       const landmarks = results.hands.landmarks[0];
       const thumb = landmarks[4];
       const index = landmarks[8];
       
-      // Draw connection line
-      ctx.beginPath();
-      ctx.moveTo(thumb.x * CANVAS_WIDTH, thumb.y * CANVAS_HEIGHT);
-      ctx.lineTo(index.x * CANVAS_WIDTH, index.y * CANVAS_HEIGHT);
-      ctx.strokeStyle = pinching ? 'rgba(255, 105, 180, 0.8)' : 'rgba(255, 255, 255, 0.4)';
-      ctx.lineWidth = pinching ? 4 : 2;
-      ctx.stroke();
+      // We are drawing on a canvas that is CSS-scaled by -1.
+      // So drawing at x * width is correct for a "mirror" feel if CSS is flipping it.
       
-      // Draw points
-      ctx.fillStyle = pinching ? '#FF69B4' : '#FFF';
-      [thumb, index].forEach(p => {
-        ctx.beginPath();
-        ctx.arc(p.x * CANVAS_WIDTH, p.y * CANVAS_HEIGHT, 6, 0, Math.PI * 2);
-        ctx.fill();
-      });
+      if (pinching) {
+          ctx.beginPath();
+          ctx.arc((thumb.x + index.x)/2 * CANVAS_WIDTH, (thumb.y + index.y)/2 * CANVAS_HEIGHT, 15, 0, Math.PI * 2);
+          ctx.fillStyle = 'rgba(236, 72, 153, 0.5)'; // Pink glow
+          ctx.fill();
+      }
     }
 
     requestRef.current = requestAnimationFrame(loop);
@@ -311,77 +307,71 @@ function App() {
     ctx.save();
     ctx.translate(flower.x, flower.y);
 
-    // Draw Stem
     const h = flower.currentHeight;
     ctx.beginPath();
     ctx.moveTo(0, 0);
-    // Bezier curve for stem
     ctx.bezierCurveTo(
-      flower.stemControlPoints[1].x, -h * 0.3,
-      flower.stemControlPoints[2].x, -h * 0.7,
+      flower.stemControlPoints[1].x, -h * 0.33,
+      flower.stemControlPoints[2].x, -h * 0.66,
       flower.stemControlPoints[3].x, -h
     );
-    ctx.lineWidth = 4;
-    ctx.strokeStyle = '#4CAF50'; // Green stem
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = '#8BC34A'; // Light Green
     ctx.stroke();
 
-    // Draw Leaves (simple)
-    if (h > 50) {
+    // Leaves
+    if (h > 40) {
       ctx.fillStyle = '#66BB6A';
       ctx.beginPath();
-      ctx.ellipse(10, -h * 0.4, 15, 5, Math.PI / 4, 0, Math.PI * 2);
+      ctx.ellipse(8, -h * 0.3, 10 + h/20, 4, Math.PI / 5, 0, Math.PI * 2);
       ctx.fill();
       ctx.beginPath();
-      ctx.ellipse(-10, -h * 0.6, 15, 5, -Math.PI / 4, 0, Math.PI * 2);
+      ctx.ellipse(-8, -h * 0.5, 10 + h/20, 4, -Math.PI / 5, 0, Math.PI * 2);
       ctx.fill();
     }
 
-    // Draw Bloom
+    // Bloom
     if (flower.bloomProgress > 0) {
       ctx.translate(flower.stemControlPoints[3].x, -h);
-      const scale = flower.bloomProgress;
+      const scale = flower.bloomProgress * (flower.maxHeight / 200); // Scale with height roughly
       ctx.scale(scale, scale);
       
-      // Flower Type Drawing
       if (flower.species === FlowerSpecies.Daisy) {
-        // Center
-        ctx.fillStyle = '#FFD700';
+        ctx.fillStyle = '#FFD700'; // Center
         ctx.beginPath();
-        ctx.arc(0, 0, 8, 0, Math.PI * 2);
+        ctx.arc(0, 0, 6, 0, Math.PI * 2);
         ctx.fill();
-        // Petals
         ctx.fillStyle = flower.color;
         for (let i = 0; i < 12; i++) {
           ctx.beginPath();
           ctx.rotate((Math.PI * 2) / 12);
-          ctx.ellipse(15, 0, 15, 5, 0, 0, Math.PI * 2);
+          ctx.ellipse(12, 0, 12, 4, 0, 0, Math.PI * 2);
           ctx.fill();
         }
       } else if (flower.species === FlowerSpecies.Tulip) {
         ctx.fillStyle = flower.color;
         ctx.beginPath();
         ctx.moveTo(0, 0);
-        ctx.bezierCurveTo(20, -20, 20, -50, 0, -60);
-        ctx.bezierCurveTo(-20, -50, -20, -20, 0, 0);
+        ctx.bezierCurveTo(15, -15, 15, -40, 0, -50);
+        ctx.bezierCurveTo(-15, -40, -15, -15, 0, 0);
         ctx.fill();
       } else if (flower.species === FlowerSpecies.Rose) {
-        ctx.fillStyle = flower.color;
-        // Spiral approximation
-        for(let i=0; i<5; i++) {
-           ctx.beginPath();
-           ctx.arc(0, 0, 10 + i*5, 0 + i, Math.PI + i);
-           ctx.fillStyle = i % 2 === 0 ? flower.color : flower.secondaryColor;
-           ctx.fill();
-        }
+         // Layered circles
+         ctx.fillStyle = flower.color;
+         ctx.beginPath(); ctx.arc(0, 0, 15, 0, Math.PI*2); ctx.fill();
+         ctx.fillStyle = flower.secondaryColor;
+         ctx.beginPath(); ctx.arc(3, -3, 10, 0, Math.PI*2); ctx.fill();
+         ctx.fillStyle = flower.color;
+         ctx.beginPath(); ctx.arc(-2, 2, 6, 0, Math.PI*2); ctx.fill();
       } else {
-        // Generic/Poppy/Lily (Simple Circles)
+        // Generic
         ctx.fillStyle = flower.color;
         ctx.beginPath();
-        ctx.arc(0, -10, 25, 0, Math.PI * 2);
+        ctx.arc(0, 0, 15, 0, Math.PI * 2);
         ctx.fill();
         ctx.fillStyle = flower.secondaryColor;
         ctx.beginPath();
-        ctx.arc(0, -10, 15, 0, Math.PI * 2);
+        ctx.arc(0, 0, 8, 0, Math.PI * 2);
         ctx.fill();
       }
     }
@@ -389,24 +379,18 @@ function App() {
     ctx.restore();
   };
 
-  // --- Interaction Handlers ---
   const handleAnalyze = useCallback(async () => {
     if (!canvasRef.current) return;
     setIsAnalyzing(true);
-    
-    // Capture the current visual state
     const imageData = canvasRef.current.toDataURL('image/png');
-    const flowerCount = flowersRef.current.length;
-    
-    const result = await analyzeGarden(imageData, flowerCount);
+    const result = await analyzeGarden(imageData, flowersRef.current.length);
     setAnalysisResult(result);
     setIsAnalyzing(false);
   }, []);
 
   return (
-    <div className="relative w-screen h-screen bg-black overflow-hidden flex justify-center items-center">
-      {/* Container to maintain aspect ratio if needed, or full screen */}
-      <div className="relative w-[1280px] h-[720px] bg-gray-900 rounded-2xl overflow-hidden shadow-2xl border border-gray-800">
+    <div className="relative w-screen h-screen bg-black overflow-hidden flex justify-center items-center font-sans">
+      <div className="relative w-full h-full max-w-[1280px] max-h-[720px] bg-black rounded-none sm:rounded-2xl overflow-hidden shadow-2xl ring-1 ring-white/10">
         
         {/* Webcam Layer */}
         <video 
@@ -444,31 +428,32 @@ function App() {
         />
 
         {/* Analyze Button */}
-        <div className="absolute bottom-6 right-6 z-20">
+        <div className="absolute bottom-8 right-8 z-20">
           <button 
             onClick={handleAnalyze}
             disabled={isAnalyzing}
-            className="flex items-center gap-2 bg-gradient-to-r from-orange-500 to-pink-500 hover:from-orange-400 hover:to-pink-400 text-white px-6 py-3 rounded-full font-bold shadow-lg transition-all transform hover:scale-105 active:scale-95 disabled:opacity-50"
+            className="group flex items-center gap-3 bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/20 text-white px-6 py-3 rounded-full font-bold shadow-lg transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <MdAutoAwesome className={isAnalyzing ? "animate-spin" : ""} />
-            {isAnalyzing ? "Analysing Garden..." : "Analyze Garden"}
+            <MdAutoAwesome className={`text-xl text-pink-500 group-hover:rotate-12 transition-transform ${isAnalyzing ? "animate-spin" : ""}`} />
+            <span className="tracking-wide text-sm">{isAnalyzing ? "ANALYZING..." : "ANALYZE GARDEN"}</span>
           </button>
         </div>
 
         {/* Analysis Modal */}
         {analysisResult && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/70 backdrop-blur-md z-30 animate-in fade-in duration-300">
-             <div className="bg-[#1a1a1a] p-8 rounded-2xl max-w-lg text-center border border-white/10 shadow-2xl">
-                <MdAutoAwesome className="text-4xl text-pink-500 mx-auto mb-4" />
-                <h3 className="text-xl font-bold text-white mb-4">Garden Analysis</h3>
-                <p className="text-gray-300 italic text-lg leading-relaxed mb-6">
+          <div className="absolute inset-0 flex items-center justify-center bg-black/80 backdrop-blur-sm z-30 animate-[fadeIn_0.3s_ease-out]">
+             <div className="bg-[#121212] p-8 rounded-2xl max-w-lg text-center border border-pink-500/30 shadow-[0_0_50px_rgba(236,72,153,0.15)] relative overflow-hidden">
+                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-pink-500 via-purple-500 to-blue-500"></div>
+                <MdAutoAwesome className="text-5xl text-pink-500 mx-auto mb-6" />
+                <h3 className="text-lg font-bold text-white mb-4 uppercase tracking-widest">Garden Insight</h3>
+                <p className="text-gray-300 font-light text-lg leading-relaxed mb-8">
                   "{analysisResult}"
                 </p>
                 <button 
                   onClick={() => setAnalysisResult(null)}
-                  className="bg-white text-black px-6 py-2 rounded-full font-bold hover:bg-gray-200"
+                  className="bg-white text-black px-8 py-3 rounded-full font-bold text-sm tracking-wider hover:bg-gray-200 transition-colors"
                 >
-                  Close
+                  DISMISS
                 </button>
              </div>
           </div>
@@ -477,8 +462,8 @@ function App() {
         {/* Loading State */}
         {!loaded && (
            <div className="absolute inset-0 bg-black flex flex-col items-center justify-center text-white z-50">
-             <div className="w-12 h-12 border-4 border-pink-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-             <p className="tracking-widest font-light">INITIALIZING VISION SYSTEMS...</p>
+             <div className="w-16 h-16 border-4 border-pink-500/30 border-t-pink-500 rounded-full animate-spin mb-6"></div>
+             <p className="tracking-[0.3em] text-xs font-bold text-pink-500 animate-pulse">INITIALIZING NEURAL NETWORKS</p>
            </div>
         )}
       </div>
