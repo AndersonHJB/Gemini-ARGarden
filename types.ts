@@ -1,3 +1,4 @@
+
 export interface Point {
   x: number;
   y: number;
@@ -29,8 +30,7 @@ export interface Seed {
 
 export interface Flower {
   id: string;
-  x: number;
-  y: number; // Ground Y
+  relX: number; // Normalized X coordinate (0 to 1)
   maxHeight: number;
   currentHeight: number;
   bloomProgress: number; // 0 to 1

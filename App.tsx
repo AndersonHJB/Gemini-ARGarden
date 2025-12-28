@@ -73,8 +73,6 @@ function App() {
     return () => { if (requestRef.current) cancelAnimationFrame(requestRef.current); };
   }, [selectedCamera]);
 
-  // 映射函数：由于现在视频通过 object-fill 强制拉伸充满屏幕，
-  // 坐标映射变得非常直接：归一化坐标直接乘以屏幕宽高。
   const mapCoordinates = (normX: number, normY: number, canvas: HTMLCanvasElement) => {
     return {
       x: normX * canvas.width,
@@ -82,13 +80,13 @@ function App() {
     };
   };
 
-  const createFlower = (x: number, y: number, theme: BiomeTheme, spec: FlowerSpecies): Flower => {
+  const createFlower = (relX: number, theme: BiomeTheme, spec: FlowerSpecies): Flower => {
     const colors = BIOME_COLORS[theme];
     const color = colors[Math.floor(Math.random() * colors.length)];
     const secondaryColor = colors[Math.floor(Math.random() * colors.length)];
     return {
       id: Math.random().toString(36).substr(2, 9),
-      x, y,
+      relX,
       maxHeight: 180 + Math.random() * 220,
       currentHeight: 10, bloomProgress: 0,
       species: spec === FlowerSpecies.Random 
@@ -131,7 +129,6 @@ function App() {
       if (distance < PINCH_THRESHOLD) {
         currentlyPinching = true;
         if (!isPinchingRef.current) {
-          // 直接映射坐标，解决边缘漂移问题
           const pos = mapCoordinates((thumb.x + index.x) / 2, (thumb.y + index.y) / 2, canvas);
           seedsRef.current.push({
             id: Math.random().toString(36).substring(7) + Date.now(),
@@ -162,7 +159,11 @@ function App() {
     // Physics
     seedsRef.current.forEach(s => { s.y += s.vy; s.vy += 0.5; });
     const landing = seedsRef.current.filter(s => s.y >= groundY);
-    landing.forEach(s => flowersRef.current.push(createFlower(s.x, groundY, biomeRef.current, speciesRef.current)));
+    landing.forEach(s => {
+      // Convert pixel X to relative X for flower creation
+      const relX = s.x / width;
+      flowersRef.current.push(createFlower(relX, biomeRef.current, speciesRef.current));
+    });
     seedsRef.current = seedsRef.current.filter(s => s.y < groundY);
 
     flowersRef.current.forEach(f => {
@@ -185,7 +186,11 @@ function App() {
     ctx.fillStyle = soilGrad;
     ctx.fillRect(0, groundY, width, height - groundY);
 
-    flowersRef.current.forEach(f => drawFlower(ctx, f));
+    flowersRef.current.forEach(f => {
+      // Calculate actual pixel X based on relative X and current width
+      const x = f.relX * width;
+      drawFlower(ctx, f, x, groundY);
+    });
     
     seedsRef.current.forEach(s => { 
       ctx.save();
@@ -209,9 +214,9 @@ function App() {
     requestRef.current = requestAnimationFrame(animate);
   };
 
-  const drawFlower = (ctx: CanvasRenderingContext2D, f: Flower) => {
+  const drawFlower = (ctx: CanvasRenderingContext2D, f: Flower, x: number, y: number) => {
     ctx.save();
-    ctx.translate(f.x, f.y);
+    ctx.translate(x, y);
     const h = f.currentHeight;
     ctx.beginPath(); 
     ctx.moveTo(0, 0);
