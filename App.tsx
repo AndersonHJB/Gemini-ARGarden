@@ -88,7 +88,8 @@ function App() {
       id: Math.random().toString(36).substr(2, 9),
       relX,
       maxHeight: 180 + Math.random() * 220,
-      currentHeight: 10, bloomProgress: 0,
+      currentHeight: 0, // 初始高度为0，即种子形态
+      bloomProgress: 0,
       species: spec === FlowerSpecies.Random 
         ? Object.values(FlowerSpecies).filter(s => s !== 'RANDOM')[Math.floor(Math.random() * 5)] 
         : spec,
@@ -160,7 +161,6 @@ function App() {
     seedsRef.current.forEach(s => { s.y += s.vy; s.vy += 0.5; });
     const landing = seedsRef.current.filter(s => s.y >= groundY);
     landing.forEach(s => {
-      // Convert pixel X to relative X for flower creation
       const relX = s.x / width;
       flowersRef.current.push(createFlower(relX, biomeRef.current, speciesRef.current));
     });
@@ -168,10 +168,14 @@ function App() {
 
     flowersRef.current.forEach(f => {
       const targetMax = f.maxHeight * growthHeightRef.current;
-      const rate = mouthOpen ? 5.5 : 0.2; 
+      // 仅当嘴巴张开时，生长率才大于0
+      const rate = mouthOpen ? 5.5 : 0; 
+      
       if (f.currentHeight < targetMax) f.currentHeight += rate;
+      
       if (f.currentHeight > targetMax * 0.5 && f.bloomProgress < 1) {
-        f.bloomProgress += mouthOpen ? 0.08 : 0.005;
+        // 同样，开花进度也仅在张嘴时增加
+        f.bloomProgress += mouthOpen ? 0.08 : 0;
       }
     });
 
@@ -187,24 +191,12 @@ function App() {
     ctx.fillRect(0, groundY, width, height - groundY);
 
     flowersRef.current.forEach(f => {
-      // Calculate actual pixel X based on relative X and current width
       const x = f.relX * width;
       drawFlower(ctx, f, x, groundY);
     });
     
     seedsRef.current.forEach(s => { 
-      ctx.save();
-      ctx.fillStyle = '#6D4C41'; 
-      ctx.shadowBlur = 8; 
-      ctx.shadowColor = 'rgba(0,0,0,0.5)';
-      ctx.beginPath(); 
-      ctx.arc(s.x, s.y, 7, 0, Math.PI * 2); 
-      ctx.fill();
-      ctx.fillStyle = 'rgba(255,255,255,0.1)';
-      ctx.beginPath();
-      ctx.arc(s.x - 2, s.y - 2, 2, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.restore();
+      drawSeed(ctx, s.x, s.y);
     });
 
     if (uiState.isPinching !== currentlyPinching || uiState.isMouthOpen !== mouthOpen || uiState.isFist !== fist) {
@@ -214,10 +206,32 @@ function App() {
     requestRef.current = requestAnimationFrame(animate);
   };
 
+  const drawSeed = (ctx: CanvasRenderingContext2D, x: number, y: number) => {
+    ctx.save();
+    ctx.fillStyle = '#6D4C41'; 
+    ctx.shadowBlur = 8; 
+    ctx.shadowColor = 'rgba(0,0,0,0.5)';
+    ctx.beginPath(); 
+    ctx.arc(x, y, 7, 0, Math.PI * 2); 
+    ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.1)';
+    ctx.beginPath();
+    ctx.arc(x - 2, y - 2, 2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  };
+
   const drawFlower = (ctx: CanvasRenderingContext2D, f: Flower, x: number, y: number) => {
+    const h = f.currentHeight;
+
+    // 如果高度很低，保持种子圆形
+    if (h < 5) {
+      drawSeed(ctx, x, y - 2); // 稍微往上移一点点避免完全重叠地平线
+      return;
+    }
+
     ctx.save();
     ctx.translate(x, y);
-    const h = f.currentHeight;
     ctx.beginPath(); 
     ctx.moveTo(0, 0);
     ctx.bezierCurveTo(f.stemControlPoints[1].x, -h * 0.33, f.stemControlPoints[2].x, -h * 0.66, f.stemControlPoints[3].x, -h);
