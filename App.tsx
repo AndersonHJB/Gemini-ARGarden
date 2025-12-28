@@ -88,7 +88,7 @@ function App() {
       id: Math.random().toString(36).substr(2, 9),
       relX,
       maxHeight: 180 + Math.random() * 220,
-      currentHeight: 0, // 初始高度为0，即种子形态
+      currentHeight: 0, 
       bloomProgress: 0,
       species: spec === FlowerSpecies.Random 
         ? Object.values(FlowerSpecies).filter(s => s !== 'RANDOM')[Math.floor(Math.random() * 5)] 
@@ -168,13 +168,9 @@ function App() {
 
     flowersRef.current.forEach(f => {
       const targetMax = f.maxHeight * growthHeightRef.current;
-      // 仅当嘴巴张开时，生长率才大于0
       const rate = mouthOpen ? 5.5 : 0; 
-      
       if (f.currentHeight < targetMax) f.currentHeight += rate;
-      
       if (f.currentHeight > targetMax * 0.5 && f.bloomProgress < 1) {
-        // 同样，开花进度也仅在张嘴时增加
         f.bloomProgress += mouthOpen ? 0.08 : 0;
       }
     });
@@ -182,14 +178,7 @@ function App() {
     // Drawing
     ctx.clearRect(0, 0, width, height);
 
-    // Ground
-    const soilGrad = ctx.createLinearGradient(0, groundY, 0, height);
-    soilGrad.addColorStop(0, 'rgba(255, 255, 255, 0.1)');
-    soilGrad.addColorStop(0.1, 'rgba(0, 0, 0, 0.4)');
-    soilGrad.addColorStop(1, 'rgba(0, 0, 0, 0.8)');
-    ctx.fillStyle = soilGrad;
-    ctx.fillRect(0, groundY, width, height - groundY);
-
+    // 1. 先绘制花朵和种子
     flowersRef.current.forEach(f => {
       const x = f.relX * width;
       drawFlower(ctx, f, x, groundY);
@@ -198,6 +187,14 @@ function App() {
     seedsRef.current.forEach(s => { 
       drawSeed(ctx, s.x, s.y);
     });
+
+    // 2. 后绘制地面（土壤），通过遮挡实现“一半在地下”的效果
+    const soilGrad = ctx.createLinearGradient(0, groundY, 0, height);
+    // 增加起始不透明度，使“入土”效果更明显
+    soilGrad.addColorStop(0, 'rgba(0, 0, 0, 0.4)');
+    soilGrad.addColorStop(1, 'rgba(0, 0, 0, 0.9)');
+    ctx.fillStyle = soilGrad;
+    ctx.fillRect(0, groundY, width, height - groundY);
 
     if (uiState.isPinching !== currentlyPinching || uiState.isMouthOpen !== mouthOpen || uiState.isFist !== fist) {
       setUiState({ isPinching: currentlyPinching, isMouthOpen: mouthOpen, isFist: fist });
@@ -224,9 +221,9 @@ function App() {
   const drawFlower = (ctx: CanvasRenderingContext2D, f: Flower, x: number, y: number) => {
     const h = f.currentHeight;
 
-    // 如果高度很低，保持种子圆形
+    // 如果高度很低，保持种子圆形。因为地面在之后绘制，这里直接传y即可实现一半被土壤遮挡。
     if (h < 5) {
-      drawSeed(ctx, x, y - 2); // 稍微往上移一点点避免完全重叠地平线
+      drawSeed(ctx, x, y); 
       return;
     }
 
