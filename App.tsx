@@ -73,32 +73,12 @@ function App() {
     return () => { if (requestRef.current) cancelAnimationFrame(requestRef.current); };
   }, [selectedCamera]);
 
-  // 核心映射函数：将 MediaPipe 归一化坐标转换为 Canvas 像素坐标
-  // 考虑到 object-fit: cover 产生的裁剪
-  const mapCoordinates = (normX: number, normY: number, video: HTMLVideoElement, canvas: HTMLCanvasElement) => {
-    const videoWidth = video.videoWidth;
-    const videoHeight = video.videoHeight;
-    const canvasWidth = canvas.width;
-    const canvasHeight = canvas.height;
-
-    const videoRatio = videoWidth / videoHeight;
-    const canvasRatio = canvasWidth / canvasHeight;
-
-    let scale, offsetX = 0, offsetY = 0;
-
-    if (canvasRatio > videoRatio) {
-      // 屏幕比视频更宽：视频宽度撑满，上下被裁剪
-      scale = canvasWidth / videoWidth;
-      offsetY = (canvasHeight - videoHeight * scale) / 2;
-    } else {
-      // 视频比屏幕更宽：视频高度撑满，左右被裁剪
-      scale = canvasHeight / videoHeight;
-      offsetX = (canvasWidth - videoWidth * scale) / 2;
-    }
-
+  // 映射函数：由于现在视频通过 object-fill 强制拉伸充满屏幕，
+  // 坐标映射变得非常直接：归一化坐标直接乘以屏幕宽高。
+  const mapCoordinates = (normX: number, normY: number, canvas: HTMLCanvasElement) => {
     return {
-      x: normX * videoWidth * scale + offsetX,
-      y: normY * videoHeight * scale + offsetY
+      x: normX * canvas.width,
+      y: normY * canvas.height
     };
   };
 
@@ -151,8 +131,8 @@ function App() {
       if (distance < PINCH_THRESHOLD) {
         currentlyPinching = true;
         if (!isPinchingRef.current) {
-          // 使用精准映射计算坐标
-          const pos = mapCoordinates((thumb.x + index.x) / 2, (thumb.y + index.y) / 2, video, canvas);
+          // 直接映射坐标，解决边缘漂移问题
+          const pos = mapCoordinates((thumb.x + index.x) / 2, (thumb.y + index.y) / 2, canvas);
           seedsRef.current.push({
             id: Math.random().toString(36).substring(7) + Date.now(),
             x: pos.x,
@@ -279,7 +259,7 @@ function App() {
         <video 
           ref={videoRef} 
           style={{ transform: `scaleX(-1)` }}
-          className="absolute inset-0 w-full h-full object-cover" 
+          className="absolute inset-0 w-full h-full object-fill" 
           playsInline muted 
         />
         <canvas ref={canvasRef} className="absolute inset-0 w-full h-full transform scale-x-[-1] pointer-events-none" />
