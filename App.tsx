@@ -110,7 +110,7 @@ function App() {
     const groundY = height - 80;
 
     const results = visionService.detect(video);
-    let pinching = false, mouthOpen = false, fist = false;
+    let currentlyPinching = false, mouthOpen = false, fist = false;
     
     // Hand Logic
     if (results?.hands?.landmarks?.length > 0) {
@@ -118,15 +118,16 @@ function App() {
       const thumb = landmarks[4], index = landmarks[8], wrist = landmarks[0];
       const tips = [landmarks[8], landmarks[12], landmarks[16], landmarks[20]];
 
-      if (Math.hypot(thumb.x - index.x, thumb.y - index.y) < PINCH_THRESHOLD) {
-        pinching = true;
-        // Seed only once per pinch action
+      const distance = Math.hypot(thumb.x - index.x, thumb.y - index.y);
+      if (distance < PINCH_THRESHOLD) {
+        currentlyPinching = true;
+        // 关键逻辑：只有当上一次状态不是捏合时，才触发播种
         if (!isPinchingRef.current) {
           seedsRef.current.push({
-            id: Date.now().toString(),
+            id: Math.random().toString(36).substring(7) + Date.now(),
             x: (thumb.x + index.x) / 2 * width,
             y: (thumb.y + index.y) / 2 * height,
-            vy: 4, color: '#FFFFFF'
+            vy: 4, color: '#5D4037'
           });
         }
       }
@@ -140,7 +141,8 @@ function App() {
       if (jaw > 0.25) mouthOpen = true;
     }
 
-    isPinchingRef.current = pinching;
+    // 更新持久化的引用状态
+    isPinchingRef.current = currentlyPinching;
     isMouthOpenRef.current = mouthOpen;
     isFistRef.current = fist;
 
@@ -157,7 +159,6 @@ function App() {
 
     flowersRef.current.forEach(f => {
       const targetMax = f.maxHeight * growthHeightRef.current;
-      // Mouth controls growth speed: 5.0 when open, 0.2 when closed
       const rate = mouthOpen ? 5.5 : 0.2; 
       
       if (f.currentHeight < targetMax) {
@@ -182,21 +183,25 @@ function App() {
 
     flowersRef.current.forEach(f => drawFlower(ctx, f));
     
-    // Draw Seeds with Glow
+    // Draw Seeds (Soil color, larger size)
     seedsRef.current.forEach(s => { 
       ctx.save();
-      ctx.fillStyle = '#FFF'; 
-      ctx.shadowBlur = 15; 
-      ctx.shadowColor = 'rgba(255,255,255,0.9)';
+      ctx.fillStyle = '#6D4C41'; 
+      ctx.shadowBlur = 8; 
+      ctx.shadowColor = 'rgba(0,0,0,0.5)';
       ctx.beginPath(); 
-      ctx.arc(s.x, s.y, 4, 0, Math.PI * 2); 
+      ctx.arc(s.x, s.y, 7, 0, Math.PI * 2); 
+      ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,0.1)';
+      ctx.beginPath();
+      ctx.arc(s.x - 2, s.y - 2, 2, 0, Math.PI * 2);
       ctx.fill();
       ctx.restore();
     });
 
     // Update UI Indicators
-    if (uiState.isPinching !== pinching || uiState.isMouthOpen !== mouthOpen || uiState.isFist !== fist) {
-      setUiState({ isPinching: pinching, isMouthOpen: mouthOpen, isFist: fist });
+    if (uiState.isPinching !== currentlyPinching || uiState.isMouthOpen !== mouthOpen || uiState.isFist !== fist) {
+      setUiState({ isPinching: currentlyPinching, isMouthOpen: mouthOpen, isFist: fist });
     }
     
     requestRef.current = requestAnimationFrame(animate);
