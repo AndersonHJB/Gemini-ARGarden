@@ -16,10 +16,6 @@ interface WorldControlsProps {
   setSpecies: (s: FlowerSpecies) => void;
   growthHeight: number;
   setGrowthHeight: (h: number) => void;
-  videoScale: number;
-  setVideoScale: (s: number) => void;
-  soilDepth: number;
-  setSoilDepth: (d: number) => void;
   cameras: MediaDeviceInfo[];
   selectedCamera: string;
   setSelectedCamera: (id: string) => void;
@@ -44,15 +40,15 @@ export const StatusPanel: React.FC<StatusPanelProps> = ({ isPinching, isMouthOpe
     <div className="absolute top-6 left-6 flex flex-col gap-2 z-20 font-mono">
       <div className={itemClass(isPinching)}>
         <div className={indicatorClass(isPinching)} />
-        PINCH: PLANT
+        PINCH: PLANT SEED
       </div>
       <div className={itemClass(isMouthOpen)}>
         <div className={indicatorClass(isMouthOpen)} />
-        MOUTH: BLOOM
+        OPEN MOUTH: GROW
       </div>
       <div className={itemClass(isFist)}>
         <div className={indicatorClass(isFist)} />
-        FIST: CLEAR
+        FIST: CLEAR GARDEN
       </div>
     </div>
   );
@@ -76,19 +72,15 @@ const ControlSlider = ({ label, value, min, max, step, onChange, unit = "" }: an
 
 export const WorldControls: React.FC<WorldControlsProps> = ({
   biome, setBiome, species, setSpecies, growthHeight, setGrowthHeight, 
-  videoScale, setVideoScale, soilDepth, setSoilDepth,
   cameras, selectedCamera, setSelectedCamera
 }) => {
   return (
     <div className="absolute top-6 right-6 w-72 bg-black/60 backdrop-blur-2xl rounded-2xl p-5 text-white border border-white/10 shadow-2xl z-20 overflow-y-auto max-h-[85vh]">
       <div className="flex justify-between items-center mb-6 border-b border-white/10 pb-3">
-        <h2 className="text-[10px] font-black tracking-[0.2em] text-gray-300">GARDEN SETTINGS</h2>
-        <span className="text-[9px] font-bold text-pink-500 border border-pink-500/30 px-2 py-0.5 rounded">PRO</span>
+        <h2 className="text-[10px] font-black tracking-[0.2em] text-gray-300">GARDEN CONTROLS</h2>
       </div>
 
-      <ControlSlider label="View Zoom" value={videoScale} min={0.5} max={1.5} step={0.01} onChange={setVideoScale} unit="%" />
-      <ControlSlider label="Growth Power" value={growthHeight} min={0.2} max={1.5} step={0.01} onChange={setGrowthHeight} unit="%" />
-      <ControlSlider label="Soil Depth" value={soilDepth} min={10} max={150} step={1} onChange={setSoilDepth} unit="px" />
+      <ControlSlider label="Growth Limit" value={growthHeight} min={0.2} max={1.5} step={0.01} onChange={setGrowthHeight} unit="%" />
 
       <div className="mb-6">
         <label className="text-[10px] text-gray-400 uppercase font-bold tracking-wider mb-3 block">Biome Theme</label>
@@ -111,7 +103,7 @@ export const WorldControls: React.FC<WorldControlsProps> = ({
       </div>
 
       <div className="mb-6">
-        <label className="text-[10px] text-gray-400 uppercase font-bold tracking-wider mb-3 block">Species</label>
+        <label className="text-[10px] text-gray-400 uppercase font-bold tracking-wider mb-3 block">Plant Species</label>
         <div className="grid grid-cols-2 gap-2">
           {Object.values(FlowerSpecies).map((s) => (
             <button
@@ -129,7 +121,7 @@ export const WorldControls: React.FC<WorldControlsProps> = ({
       </div>
 
       <div className="group">
-        <label className="text-[10px] text-gray-400 uppercase font-bold tracking-wider mb-2 block">Camera</label>
+        <label className="text-[10px] text-gray-400 uppercase font-bold tracking-wider mb-2 block">Camera Source</label>
         <select 
           value={selectedCamera} 
           onChange={(e) => setSelectedCamera(e.target.value)}
