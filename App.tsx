@@ -20,12 +20,10 @@ function App() {
   const isFistRef = useRef(false);
   const fistHoldFramesRef = useRef(0);
   
-  // Settings Refs for low-latency access in loop
   const biomeRef = useRef<BiomeTheme>(BiomeTheme.Sunset);
   const speciesRef = useRef<FlowerSpecies>(FlowerSpecies.Random);
   const growthHeightRef = useRef(1.0);
 
-  // UI State
   const [loaded, setLoaded] = useState(false);
   const [cameras, setCameras] = useState<MediaDeviceInfo[]>([]);
   const [selectedCamera, setSelectedCamera] = useState<string>('');
@@ -75,6 +73,35 @@ function App() {
     return () => { if (requestRef.current) cancelAnimationFrame(requestRef.current); };
   }, [selectedCamera]);
 
+  // 核心映射函数：将 MediaPipe 归一化坐标转换为 Canvas 像素坐标
+  // 考虑到 object-fit: cover 产生的裁剪
+  const mapCoordinates = (normX: number, normY: number, video: HTMLVideoElement, canvas: HTMLCanvasElement) => {
+    const videoWidth = video.videoWidth;
+    const videoHeight = video.videoHeight;
+    const canvasWidth = canvas.width;
+    const canvasHeight = canvas.height;
+
+    const videoRatio = videoWidth / videoHeight;
+    const canvasRatio = canvasWidth / canvasHeight;
+
+    let scale, offsetX = 0, offsetY = 0;
+
+    if (canvasRatio > videoRatio) {
+      // 屏幕比视频更宽：视频宽度撑满，上下被裁剪
+      scale = canvasWidth / videoWidth;
+      offsetY = (canvasHeight - videoHeight * scale) / 2;
+    } else {
+      // 视频比屏幕更宽：视频高度撑满，左右被裁剪
+      scale = canvasHeight / videoHeight;
+      offsetX = (canvasWidth - videoWidth * scale) / 2;
+    }
+
+    return {
+      x: normX * videoWidth * scale + offsetX,
+      y: normY * videoHeight * scale + offsetY
+    };
+  };
+
   const createFlower = (x: number, y: number, theme: BiomeTheme, spec: FlowerSpecies): Flower => {
     const colors = BIOME_COLORS[theme];
     const color = colors[Math.floor(Math.random() * colors.length)];
@@ -95,7 +122,10 @@ function App() {
   const animate = () => {
     const canvas = canvasRef.current;
     const video = videoRef.current;
-    if (!canvas || !video) { requestRef.current = requestAnimationFrame(animate); return; }
+    if (!canvas || !video || video.videoWidth === 0) { 
+      requestRef.current = requestAnimationFrame(animate); 
+      return; 
+    }
 
     if (canvas.width !== window.innerWidth || canvas.height !== window.innerHeight) {
       canvas.width = window.innerWidth;
@@ -112,7 +142,6 @@ function App() {
     const results = visionService.detect(video);
     let currentlyPinching = false, mouthOpen = false, fist = false;
     
-    // Hand Logic
     if (results?.hands?.landmarks?.length > 0) {
       const landmarks = results.hands.landmarks[0];
       const thumb = landmarks[4], index = landmarks[8], wrist = landmarks[0];
@@ -121,12 +150,13 @@ function App() {
       const distance = Math.hypot(thumb.x - index.x, thumb.y - index.y);
       if (distance < PINCH_THRESHOLD) {
         currentlyPinching = true;
-        // 关键逻辑：只有当上一次状态不是捏合时，才触发播种
         if (!isPinchingRef.current) {
+          // 使用精准映射计算坐标
+          const pos = mapCoordinates((thumb.x + index.x) / 2, (thumb.y + index.y) / 2, video, canvas);
           seedsRef.current.push({
             id: Math.random().toString(36).substring(7) + Date.now(),
-            x: (thumb.x + index.x) / 2 * width,
-            y: (thumb.y + index.y) / 2 * height,
+            x: pos.x,
+            y: pos.y,
             vy: 4, color: '#5D4037'
           });
         }
@@ -135,13 +165,11 @@ function App() {
       if (avgDist < 0.15) fist = true;
     }
 
-    // Face Logic
     if (results?.faces?.faceBlendshapes?.[0]) {
       const jaw = results.faces.faceBlendshapes[0].categories.find(b => b.categoryName === 'jawOpen')?.score || 0;
       if (jaw > 0.25) mouthOpen = true;
     }
 
-    // 更新持久化的引用状态
     isPinchingRef.current = currentlyPinching;
     isMouthOpenRef.current = mouthOpen;
     isFistRef.current = fist;
@@ -151,7 +179,7 @@ function App() {
       if (fistHoldFramesRef.current === 25) { flowersRef.current = []; seedsRef.current = []; }
     } else fistHoldFramesRef.current = 0;
 
-    // Physics & Growth
+    // Physics
     seedsRef.current.forEach(s => { s.y += s.vy; s.vy += 0.5; });
     const landing = seedsRef.current.filter(s => s.y >= groundY);
     landing.forEach(s => flowersRef.current.push(createFlower(s.x, groundY, biomeRef.current, speciesRef.current)));
@@ -160,11 +188,7 @@ function App() {
     flowersRef.current.forEach(f => {
       const targetMax = f.maxHeight * growthHeightRef.current;
       const rate = mouthOpen ? 5.5 : 0.2; 
-      
-      if (f.currentHeight < targetMax) {
-        f.currentHeight += rate;
-      }
-      
+      if (f.currentHeight < targetMax) f.currentHeight += rate;
       if (f.currentHeight > targetMax * 0.5 && f.bloomProgress < 1) {
         f.bloomProgress += mouthOpen ? 0.08 : 0.005;
       }
@@ -173,7 +197,7 @@ function App() {
     // Drawing
     ctx.clearRect(0, 0, width, height);
 
-    // Soil Effect
+    // Ground
     const soilGrad = ctx.createLinearGradient(0, groundY, 0, height);
     soilGrad.addColorStop(0, 'rgba(255, 255, 255, 0.1)');
     soilGrad.addColorStop(0.1, 'rgba(0, 0, 0, 0.4)');
@@ -183,7 +207,6 @@ function App() {
 
     flowersRef.current.forEach(f => drawFlower(ctx, f));
     
-    // Draw Seeds (Soil color, larger size)
     seedsRef.current.forEach(s => { 
       ctx.save();
       ctx.fillStyle = '#6D4C41'; 
@@ -199,7 +222,6 @@ function App() {
       ctx.restore();
     });
 
-    // Update UI Indicators
     if (uiState.isPinching !== currentlyPinching || uiState.isMouthOpen !== mouthOpen || uiState.isFist !== fist) {
       setUiState({ isPinching: currentlyPinching, isMouthOpen: mouthOpen, isFist: fist });
     }
@@ -211,28 +233,16 @@ function App() {
     ctx.save();
     ctx.translate(f.x, f.y);
     const h = f.currentHeight;
-    
-    // Stem
     ctx.beginPath(); 
     ctx.moveTo(0, 0);
-    ctx.bezierCurveTo(
-      f.stemControlPoints[1].x, -h * 0.33, 
-      f.stemControlPoints[2].x, -h * 0.66, 
-      f.stemControlPoints[3].x, -h
-    );
-    ctx.lineWidth = 4; 
-    ctx.strokeStyle = '#4CAF50'; 
-    ctx.stroke();
+    ctx.bezierCurveTo(f.stemControlPoints[1].x, -h * 0.33, f.stemControlPoints[2].x, -h * 0.66, f.stemControlPoints[3].x, -h);
+    ctx.lineWidth = 4; ctx.strokeStyle = '#4CAF50'; ctx.stroke();
     
-    // Bloom
     if (f.bloomProgress > 0) {
       ctx.translate(f.stemControlPoints[3].x, -h);
       const scale = f.bloomProgress * (f.maxHeight / 220);
       ctx.scale(scale, scale);
-      
-      ctx.shadowBlur = 20;
-      ctx.shadowColor = f.color;
-      ctx.fillStyle = f.color;
+      ctx.shadowBlur = 20; ctx.shadowColor = f.color; ctx.fillStyle = f.color;
       
       if (f.species === FlowerSpecies.Daisy) {
         ctx.fillStyle = '#FFEB3B'; ctx.beginPath(); ctx.arc(0, 0, 8, 0, Math.PI * 2); ctx.fill();
@@ -244,12 +254,10 @@ function App() {
       } else if (f.species === FlowerSpecies.Tulip) {
         ctx.beginPath(); ctx.moveTo(0, 0); 
         ctx.bezierCurveTo(18, -18, 18, -45, 0, -55); 
-        ctx.bezierCurveTo(-18, -45, -18, -18, 0, 0); 
-        ctx.fill();
+        ctx.bezierCurveTo(-18, -45, -18, -18, 0, 0); ctx.fill();
       } else if (f.species === FlowerSpecies.Rose) {
          ctx.beginPath(); ctx.arc(0, 0, 16, 0, Math.PI*2); ctx.fill();
-         ctx.fillStyle = f.secondaryColor; 
-         ctx.beginPath(); ctx.arc(4, -4, 12, 0, Math.PI*2); ctx.fill();
+         ctx.fillStyle = f.secondaryColor; ctx.beginPath(); ctx.arc(4, -4, 12, 0, Math.PI*2); ctx.fill();
       } else {
         ctx.beginPath(); ctx.arc(0, 0, 15, 0, Math.PI * 2); ctx.fill();
         ctx.fillStyle = f.secondaryColor; ctx.beginPath(); ctx.arc(0, 0, 9, 0, Math.PI * 2); ctx.fill();
