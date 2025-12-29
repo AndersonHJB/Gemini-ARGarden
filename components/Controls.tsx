@@ -13,6 +13,7 @@ interface StatusPanelProps {
 interface WorldControlsProps {
   biome: BiomeTheme;
   setBiome: (b: BiomeTheme) => void;
+  onApplyBiomeToAll: () => void;
   species: FlowerSpecies;
   setSpecies: (s: FlowerSpecies) => void;
   onApplySpeciesToAll: () => void;
@@ -82,7 +83,7 @@ const ControlSlider = ({ label, value, min, max, step, onChange, unit = "" }: an
 );
 
 export const WorldControls: React.FC<WorldControlsProps> = ({
-  biome, setBiome, species, setSpecies, onApplySpeciesToAll, growthHeight, setGrowthHeight, 
+  biome, setBiome, onApplyBiomeToAll, species, setSpecies, onApplySpeciesToAll, growthHeight, setGrowthHeight, 
   cameras, selectedCamera, setSelectedCamera
 }) => {
   return (
@@ -94,7 +95,15 @@ export const WorldControls: React.FC<WorldControlsProps> = ({
       <ControlSlider label="Growth Height" value={growthHeight} min={0.2} max={1.5} step={0.01} onChange={setGrowthHeight} unit="%" />
 
       <div className="mb-6">
-        <label className="text-[10px] text-gray-400 uppercase font-bold tracking-wider mb-3 block">Biome Theme</label>
+        <div className="flex justify-between items-center mb-3">
+          <label className="text-[10px] text-gray-400 uppercase font-bold tracking-wider block">Biome Theme</label>
+          <button 
+            onClick={onApplyBiomeToAll}
+            className="text-[8px] font-black tracking-widest text-pink-400 border border-pink-400/30 px-2 py-0.5 rounded hover:bg-pink-400/10 active:scale-95 transition-all"
+          >
+            APPLY TO ALL
+          </button>
+        </div>
         <div className="grid grid-cols-4 gap-2">
           {Object.values(BiomeTheme).map((theme) => {
              const isActive = biome === theme;

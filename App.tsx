@@ -393,7 +393,6 @@ function App() {
       ctx.fillStyle = c;
       ctx.beginPath();
       ctx.moveTo(0, 0);
-      // Create an organic heart-like petal shape
       ctx.bezierCurveTo(-w * 0.8, -h * 0.2, -w, -h * 0.8, 0, -h);
       ctx.bezierCurveTo(w, -h * 0.8, w * 0.8, -h * 0.2, 0, 0);
       ctx.fill();
@@ -420,34 +419,25 @@ function App() {
         break;
 
       case FlowerSpecies.Rose:
-        // Artistic Rose: Multiple layers of spiraling petals
-        const roseRotation = f.relX * Math.PI; // Consistent but unique rotation per flower
-        
-        // Outer Layer: 6 large petals, more open
+        const roseRotation = f.relX * Math.PI; 
         for (let i = 0; i < 6; i++) {
           ctx.save();
           ctx.rotate(roseRotation + (i * Math.PI * 2 / 6));
           drawPetal(18, 24, color);
           ctx.restore();
         }
-        
-        // Middle Layer: 5 petals, slightly offset and more saturated
         for (let i = 0; i < 5; i++) {
           ctx.save();
           ctx.rotate(roseRotation + 0.5 + (i * Math.PI * 2 / 5));
           drawPetal(14, 20, secondaryColor);
           ctx.restore();
         }
-        
-        // Inner Layer: 3 petals, tight and compact
         for (let i = 0; i < 3; i++) {
           ctx.save();
           ctx.rotate(roseRotation + 1.2 + (i * Math.PI * 2 / 3));
           drawPetal(8, 14, color);
           ctx.restore();
         }
-        
-        // Final central bud detail
         ctx.fillStyle = secondaryColor;
         ctx.beginPath();
         ctx.arc(0, -2, 4, 0, Math.PI * 2);
@@ -496,12 +486,10 @@ function App() {
           ctx.fill();
           ctx.restore();
         }
-        
         ctx.fillStyle = '#1a1a1a';
         ctx.beginPath();
         ctx.arc(0, 0, 10, 0, Math.PI * 2);
         ctx.fill();
-        
         ctx.fillStyle = '#ffffff';
         for (let j = 0; j < 8; j++) {
           const angle = (Math.PI * 2 / 8) * j;
@@ -539,6 +527,17 @@ function App() {
     }));
   }, []);
 
+  const handleApplyBiomeToAll = useCallback(() => {
+    const currentBiome = biomeRef.current;
+    const colorPool = BIOME_COLORS[currentBiome];
+    
+    flowersRef.current = flowersRef.current.map(f => ({
+      ...f,
+      color: colorPool[Math.floor(Math.random() * colorPool.length)],
+      secondaryColor: colorPool[Math.floor(Math.random() * colorPool.length)]
+    }));
+  }, []);
+
   const handleAnalyze = useCallback(async () => {
     if (!canvasRef.current) return;
     setIsAnalyzing(true);
@@ -560,6 +559,7 @@ function App() {
         <StatusPanel {...uiState} />
         <WorldControls 
           biome={biome} setBiome={setBiomeState}
+          onApplyBiomeToAll={handleApplyBiomeToAll}
           species={species} setSpecies={setSpeciesState}
           onApplySpeciesToAll={handleApplySpeciesToAll}
           growthHeight={growthHeight} setGrowthHeight={setGrowthHeightState}
