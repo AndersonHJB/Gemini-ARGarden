@@ -6,9 +6,15 @@ import { StatusPanel, WorldControls } from './components/Controls';
 import { BiomeTheme, BIOME_COLORS, Flower, FlowerSpecies, Point, Seed, Particle } from './types';
 import { MdAutoAwesome } from "react-icons/md";
 
-const PINCH_THRESHOLD = 0.04; 
-const FIST_CLEAR_SECONDS = 3.0;
-const FIST_GRACE_FRAMES = 12; // Allow some lost detection frames to prevent timer reset jitter
+// Refined detection constants for high responsiveness
+const PINCH_THRESHOLD_START = 0.042; // More relaxed entry
+const PINCH_THRESHOLD_END = 0.055;   // Very relaxed exit to prevent flickering
+const DEPTH_THRESHOLD = 0.12;        // Significantly more tolerant of Z-axis jitter
+const STABILITY_REQUIRED_FRAMES = 1; // Instant response (1 frame instead of 3)
+const PLANTING_COOLDOWN_MS = 350;    // Slightly faster continuous seeding rate
+
+const FIST_CLEAR_SECONDS = 2.5;      // Slightly faster clearing
+const FIST_GRACE_FRAMES = 10;
 
 function App() {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -21,7 +27,11 @@ function App() {
   const lastResultsRef = useRef<any>(null);
   const lastTimeRef = useRef<number>(performance.now());
   
+  // Hand state tracking
+  const pinchStableFramesRef = useRef(0);
+  const lastSeedSpawnTimeRef = useRef(0);
   const isPinchingRef = useRef(false);
+  
   const isMouthOpenRef = useRef(false);
   const isFistRef = useRef(false);
   const fistSecondsRef = useRef(0);
@@ -69,7 +79,7 @@ function App() {
     const startStream = async () => {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
-          video: { deviceId: selectedCamera, width: { ideal: 1920 }, height: { ideal: 1080 } }
+          video: { deviceId: selectedCamera, width: { ideal: 1280 }, height: { ideal: 720 } }
         });
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
@@ -170,37 +180,56 @@ function App() {
     const results = currentResults || lastResultsRef.current;
     lastResultsRef.current = results;
 
-    let currentlyPinching = false, mouthOpen = false, handDetected = false, fistRaw = false;
+    let currentlyPinching = false, mouthOpen = false, fistRaw = false;
     
     if (results?.hands?.landmarks?.length > 0) {
-      handDetected = true;
       const landmarks = results.hands.landmarks[0];
       const thumb = landmarks[4], index = landmarks[8], wrist = landmarks[0];
       const tips = [landmarks[8], landmarks[12], landmarks[16], landmarks[20]];
 
-      const distance = Math.hypot(thumb.x - index.x, thumb.y - index.y);
-      if (distance < PINCH_THRESHOLD) {
+      // Improved Pinch Detection Logic
+      const dist2D = Math.hypot(thumb.x - index.x, thumb.y - index.y);
+      const distZ = Math.abs(thumb.z - index.z);
+      
+      // Use hysteresis thresholding for smoother interaction
+      const threshold = isPinchingRef.current ? PINCH_THRESHOLD_END : PINCH_THRESHOLD_START;
+      
+      if (dist2D < threshold && distZ < DEPTH_THRESHOLD) {
+        pinchStableFramesRef.current++;
+      } else {
+        pinchStableFramesRef.current = 0;
+      }
+
+      if (pinchStableFramesRef.current >= STABILITY_REQUIRED_FRAMES) {
         currentlyPinching = true;
-        if (!isPinchingRef.current) {
+        const now = Date.now();
+        
+        // Continuous Seeding: Spawn a seed if the cooldown period has passed,
+        // even if the user hasn't released the pinch.
+        if (now - lastSeedSpawnTimeRef.current > PLANTING_COOLDOWN_MS) {
           const pos = mapCoordinates((thumb.x + index.x) / 2, (thumb.y + index.y) / 2, canvas);
           seedsRef.current.push({
-            id: Math.random().toString(36).substring(7) + Date.now(),
+            id: 'seed-' + Math.random().toString(36).substring(2, 7) + now,
             x: pos.x,
             y: pos.y,
-            vy: 5, color: '#5D4037'
+            vy: 4, 
+            color: '#5D4037'
           });
+          lastSeedSpawnTimeRef.current = now;
         }
       }
 
       const avgDist = tips.reduce((acc, t) => acc + Math.hypot(t.x - wrist.x, t.y - wrist.y), 0) / 4;
-      if (avgDist < 0.22) {
-        fistRaw = true;
-      }
+      if (avgDist < 0.2) fistRaw = true;
+    } else {
+      // Clear state if hand is lost
+      pinchStableFramesRef.current = 0;
+      isPinchingRef.current = false;
     }
 
     if (results?.faces?.faceBlendshapes?.[0]) {
       const jaw = results.faces.faceBlendshapes[0].categories.find(b => b.categoryName === 'jawOpen')?.score || 0;
-      if (jaw > 0.28) mouthOpen = true;
+      if (jaw > 0.25) mouthOpen = true;
     }
 
     isPinchingRef.current = currentlyPinching;
@@ -214,7 +243,7 @@ function App() {
         flowersRef.current.forEach(f => {
           const fx = f.relX * width;
           const fy = groundY - (f.currentHeight * growthHeightRef.current);
-          spawnExplosion(fx, fy, f.color, 15);
+          spawnExplosion(fx, fy, f.color, 12);
         });
         flowersRef.current = [];
         seedsRef.current = [];
@@ -229,9 +258,10 @@ function App() {
       }
     }
 
+    // Physics
     seedsRef.current.forEach(s => { 
       s.y += s.vy * dt; 
-      s.vy += 0.5 * dt; 
+      s.vy += 0.4 * dt; 
     });
 
     const landing = seedsRef.current.filter(s => s.y >= groundY);
@@ -280,14 +310,14 @@ function App() {
     ctx.globalAlpha = 1.0;
 
     const soilGrad = ctx.createLinearGradient(0, groundY, 0, height);
-    soilGrad.addColorStop(0, 'rgba(30, 15, 5, 0.5)');
-    soilGrad.addColorStop(1, 'rgba(0, 0, 0, 0.9)');
+    soilGrad.addColorStop(0, 'rgba(30, 15, 5, 0.4)');
+    soilGrad.addColorStop(1, 'rgba(0, 0, 0, 0.8)');
     ctx.fillStyle = soilGrad;
     ctx.fillRect(0, groundY, width, height - groundY);
 
     const currentFistRemaining = Math.max(0, FIST_CLEAR_SECONDS - fistSecondsRef.current);
 
-    if (uiState.isPinching !== currentlyPinching || uiState.isMouthOpen !== mouthOpen || uiState.isFist !== isFistRef.current || Math.abs(uiState.fistTimeRemaining - currentFistRemaining) > 0.05) {
+    if (uiState.isPinching !== currentlyPinching || uiState.isMouthOpen !== mouthOpen || uiState.isFist !== isFistRef.current || Math.abs(uiState.fistTimeRemaining - currentFistRemaining) > 0.1) {
       setUiState({ 
         isPinching: currentlyPinching, 
         isMouthOpen: mouthOpen, 
@@ -546,12 +576,12 @@ function App() {
   }, []);
 
   return (
-    <div className="fixed inset-0 bg-black overflow-hidden select-none font-sans">
+    <div className="fixed inset-0 bg-black overflow-hidden select-none font-sans text-white">
       <div className="relative w-full h-full">
         <video 
           ref={videoRef} 
           style={{ transform: `scaleX(-1)` }}
-          className="absolute inset-0 w-full h-full object-fill" 
+          className="absolute inset-0 w-full h-full object-fill opacity-70" 
           playsInline muted 
         />
         <canvas ref={canvasRef} className="absolute inset-0 w-full h-full transform scale-x-[-1] pointer-events-none" />
