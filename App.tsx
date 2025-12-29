@@ -93,7 +93,7 @@ function App() {
       id: Math.random().toString(36).substr(2, 9),
       relX,
       maxHeight: 180 + Math.random() * 220,
-      currentHeight: 0, 
+      currentHeight: 0, // 这里的 currentHeight 现在代表基础生长进度（未缩放）
       bloomProgress: 0,
       species: spec === FlowerSpecies.Random 
         ? Object.values(FlowerSpecies).filter(s => s !== 'RANDOM')[Math.floor(Math.random() * 5)] 
@@ -111,7 +111,6 @@ function App() {
       return; 
     }
 
-    // 计算 deltaTime (以 60fps 为基准，16.6ms 为 1.0)
     const currentTime = performance.now();
     const dt = (currentTime - lastTimeRef.current) / 16.666;
     lastTimeRef.current = currentTime;
@@ -128,7 +127,6 @@ function App() {
     const height = canvas.height;
     const groundY = height - 20; 
 
-    // 获取检测结果，如果视频帧没变，沿用上一次的结果
     const currentResults = visionService.detect(video);
     const results = currentResults || lastResultsRef.current;
     lastResultsRef.current = results;
@@ -171,7 +169,6 @@ function App() {
       if (fistHoldFramesRef.current === 25) { flowersRef.current = []; seedsRef.current = []; }
     } else fistHoldFramesRef.current = 0;
 
-    // 物理更新 (使用 dt 确保平滑)
     seedsRef.current.forEach(s => { 
       s.y += s.vy * dt; 
       s.vy += 0.5 * dt; 
@@ -185,48 +182,40 @@ function App() {
     seedsRef.current = seedsRef.current.filter(s => s.y < groundY);
 
     flowersRef.current.forEach(f => {
-      // 这里的 targetMax 由滑块统一控制
-      const targetMax = f.maxHeight * growthHeightRef.current;
+      // 这里的 rate 控制基础高度的增长
       const rate = (mouthOpen ? 5.5 : 0) * dt; 
       
-      // 生长：只有在张嘴且高度未到 targetMax 时增加
-      if (f.currentHeight < targetMax) {
+      // 增加基础高度，不再受当前滑块值的物理限制
+      if (f.currentHeight < f.maxHeight) {
         f.currentHeight += rate;
-        // 防止过冲
-        if (f.currentHeight > targetMax) f.currentHeight = targetMax;
+        if (f.currentHeight > f.maxHeight) f.currentHeight = f.maxHeight;
       } 
       
-      // 统一控制：如果滑块拉小了，targetMax 变小，已长成的花朵强制同步缩小
-      if (f.currentHeight > targetMax) {
-        f.currentHeight = targetMax;
-      }
-
-      if (f.currentHeight > targetMax * 0.5 && f.bloomProgress < 1) {
+      // 开花进度同样基于基础高度
+      if (f.currentHeight > f.maxHeight * 0.5 && f.bloomProgress < 1) {
         f.bloomProgress += (mouthOpen ? 0.08 : 0) * dt;
       }
     });
 
-    // 绘图
     ctx.clearRect(0, 0, width, height);
 
-    // 1. 先绘制花朵和种子
     flowersRef.current.forEach(f => {
       const x = f.relX * width;
-      drawFlower(ctx, f, x, groundY);
+      // 渲染时将滑块系数 growthHeightRef.current 应用于高度
+      const displayHeight = f.currentHeight * growthHeightRef.current;
+      drawFlower(ctx, f, x, groundY, displayHeight);
     });
     
     seedsRef.current.forEach(s => { 
       drawSeed(ctx, s.x, s.y);
     });
 
-    // 2. 后绘制地面（土壤）实现入土效果
     const soilGrad = ctx.createLinearGradient(0, groundY, 0, height);
     soilGrad.addColorStop(0, 'rgba(0, 0, 0, 0.4)');
     soilGrad.addColorStop(1, 'rgba(0, 0, 0, 0.9)');
     ctx.fillStyle = soilGrad;
     ctx.fillRect(0, groundY, width, height - groundY);
 
-    // 更新 UI 状态
     if (uiState.isPinching !== currentlyPinching || uiState.isMouthOpen !== mouthOpen || uiState.isFist !== fist) {
       setUiState({ isPinching: currentlyPinching, isMouthOpen: mouthOpen, isFist: fist });
     }
@@ -249,13 +238,14 @@ function App() {
     ctx.restore();
   };
 
-  const drawFlower = (ctx: CanvasRenderingContext2D, f: Flower, x: number, y: number) => {
-    const h = f.currentHeight;
-
-    if (h < 5) {
+  const drawFlower = (ctx: CanvasRenderingContext2D, f: Flower, x: number, y: number, displayHeight: number) => {
+    // 使用基础高度判断是否还是种子状态，避免缩放导致种子大小剧烈变化
+    if (f.currentHeight < 5) {
       drawSeed(ctx, x, y); 
       return;
     }
+
+    const h = displayHeight;
 
     ctx.save();
     ctx.translate(x, y);
@@ -266,8 +256,9 @@ function App() {
     
     if (f.bloomProgress > 0) {
       ctx.translate(f.stemControlPoints[3].x, -h);
-      const scale = f.bloomProgress * (f.maxHeight / 220);
-      ctx.scale(scale, Math.max(0.1, scale)); // 防止 scale 为 0 报错
+      // 开花的大小也应该随滑块比例缩放
+      const scale = f.bloomProgress * (f.maxHeight / 220) * growthHeightRef.current;
+      ctx.scale(Math.max(0.01, scale), Math.max(0.01, scale)); 
       ctx.shadowBlur = 20; ctx.shadowColor = f.color; ctx.fillStyle = f.color;
       
       if (f.species === FlowerSpecies.Daisy) {
