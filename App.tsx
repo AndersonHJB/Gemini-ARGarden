@@ -190,7 +190,6 @@ function App() {
 
       // Robust Fist check: tips are close to wrist
       const avgDist = tips.reduce((acc, t) => acc + Math.hypot(t.x - wrist.x, t.y - wrist.y), 0) / 4;
-      // Lenient threshold 0.22 to avoid "stuck" countdown
       if (avgDist < 0.22) {
         fistRaw = true;
       }
@@ -204,13 +203,11 @@ function App() {
     isPinchingRef.current = currentlyPinching;
     isMouthOpenRef.current = mouthOpen;
 
-    // Fist Logic with Grace Period and Effect
     if (fistRaw) {
       fistGraceRef.current = FIST_GRACE_FRAMES;
       isFistRef.current = true;
       fistSecondsRef.current += dtSeconds;
       if (fistSecondsRef.current >= FIST_CLEAR_SECONDS) {
-        // Trigger Clear!
         flowersRef.current.forEach(f => {
           const fx = f.relX * width;
           const fy = groundY - (f.currentHeight * growthHeightRef.current);
@@ -230,7 +227,6 @@ function App() {
       }
     }
 
-    // Physics
     seedsRef.current.forEach(s => { 
       s.y += s.vy * dt; 
       s.vy += 0.5 * dt; 
@@ -254,16 +250,14 @@ function App() {
       }
     });
 
-    // Particle physics
     particlesRef.current.forEach(p => {
       p.x += p.vx * dt;
       p.y += p.vy * dt;
-      p.vy += 0.2 * dt; // Gravity
+      p.vy += 0.2 * dt; 
       p.life -= 0.02 * dt;
     });
     particlesRef.current = particlesRef.current.filter(p => p.life > 0);
 
-    // Render
     ctx.clearRect(0, 0, width, height);
 
     flowersRef.current.forEach(f => {
@@ -274,7 +268,6 @@ function App() {
     
     seedsRef.current.forEach(s => drawSeed(ctx, s.x, s.y));
 
-    // Draw Particles (Fireworks)
     particlesRef.current.forEach(p => {
       ctx.globalAlpha = p.life;
       ctx.fillStyle = p.color;
@@ -284,14 +277,12 @@ function App() {
     });
     ctx.globalAlpha = 1.0;
 
-    // Ground line
     const soilGrad = ctx.createLinearGradient(0, groundY, 0, height);
     soilGrad.addColorStop(0, 'rgba(30, 15, 5, 0.5)');
     soilGrad.addColorStop(1, 'rgba(0, 0, 0, 0.9)');
     ctx.fillStyle = soilGrad;
     ctx.fillRect(0, groundY, width, height - groundY);
 
-    // Screen Flash effect
     if (flashRef.current > 0) {
       ctx.fillStyle = `rgba(255, 255, 255, ${flashRef.current})`;
       ctx.fillRect(0, 0, width, height);
@@ -457,20 +448,40 @@ function App() {
         break;
 
       case FlowerSpecies.Poppy:
+        // Re-implementing Poppy based on the reference image:
+        // 3 Large rounded triangular petals, and a dark seed center with white dots.
         ctx.fillStyle = color;
-        for (let i = 0; i < 4; i++) {
+        for (let i = 0; i < 3; i++) {
+          ctx.save();
+          ctx.rotate((Math.PI * 2 / 3) * i);
           ctx.beginPath();
-          ctx.rotate((Math.PI * 2) / 4);
-          ctx.ellipse(15, 0, 20, 18, 0, 0, Math.PI * 2);
+          // Petal shape: a slightly squashed rounded triangle
+          ctx.moveTo(0, 0);
+          ctx.bezierCurveTo(-25, -20, -20, -35, 0, -35);
+          ctx.bezierCurveTo(20, -35, 25, -20, 0, 0);
           ctx.fill();
+          ctx.restore();
         }
-        ctx.fillStyle = '#212121';
+        
+        // Dark Center
+        ctx.fillStyle = '#1a1a1a';
         ctx.beginPath();
         ctx.arc(0, 0, 10, 0, Math.PI * 2);
         ctx.fill();
-        ctx.strokeStyle = '#FFC107';
-        ctx.lineWidth = 1;
-        ctx.stroke();
+        
+        // White dots (seeds/stamens) inside the center as seen in image
+        ctx.fillStyle = '#ffffff';
+        for (let j = 0; j < 8; j++) {
+          const angle = (Math.PI * 2 / 8) * j;
+          const dist = 5;
+          ctx.beginPath();
+          ctx.arc(Math.cos(angle) * dist, Math.sin(angle) * dist, 1.5, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        // Center dot
+        ctx.beginPath();
+        ctx.arc(0, 0, 1.5, 0, Math.PI * 2);
+        ctx.fill();
         break;
 
       default:
