@@ -110,9 +110,16 @@ function App() {
   };
 
   const createFlower = (relX: number, theme: BiomeTheme, spec: FlowerSpecies): Flower => {
-    const colors = BIOME_COLORS[theme];
-    const color = colors[Math.floor(Math.random() * colors.length)];
-    const secondaryColor = colors[Math.floor(Math.random() * colors.length)];
+    // Determine color pool: if RANDOM, use all available colors across all biomes
+    let colorPool: string[];
+    if (spec === FlowerSpecies.Random) {
+      colorPool = Object.values(BIOME_COLORS).flat();
+    } else {
+      colorPool = BIOME_COLORS[theme];
+    }
+
+    const color = colorPool[Math.floor(Math.random() * colorPool.length)];
+    const secondaryColor = colorPool[Math.floor(Math.random() * colorPool.length)];
     
     const speciesOptions = Object.values(FlowerSpecies).filter(s => s !== FlowerSpecies.Random);
     const chosenSpecies = spec === FlowerSpecies.Random 
