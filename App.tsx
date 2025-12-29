@@ -3,10 +3,12 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { visionService } from './services/visionService';
 import { analyzeGarden } from './services/geminiService';
 import { StatusPanel, WorldControls } from './components/Controls';
-import { BiomeTheme, BIOME_COLORS, Flower, FlowerSpecies, Point, Seed } from './types';
+import { BiomeTheme, BIOME_COLORS, Flower, FlowerSpecies, Point, Seed, Particle } from './types';
 import { MdAutoAwesome } from "react-icons/md";
 
 const PINCH_THRESHOLD = 0.04; 
+const FIST_CLEAR_SECONDS = 3.0;
+const FIST_GRACE_FRAMES = 12; // Allow some lost detection frames to prevent timer reset jitter
 
 function App() {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -15,13 +17,16 @@ function App() {
   
   const seedsRef = useRef<Seed[]>([]);
   const flowersRef = useRef<Flower[]>([]);
+  const particlesRef = useRef<Particle[]>([]);
   const lastResultsRef = useRef<any>(null);
   const lastTimeRef = useRef<number>(performance.now());
   
   const isPinchingRef = useRef(false);
   const isMouthOpenRef = useRef(false);
   const isFistRef = useRef(false);
-  const fistHoldFramesRef = useRef(0);
+  const fistSecondsRef = useRef(0);
+  const fistGraceRef = useRef(0);
+  const flashRef = useRef(0);
   
   const biomeRef = useRef<BiomeTheme>(BiomeTheme.Sunset);
   const speciesRef = useRef<FlowerSpecies>(FlowerSpecies.Random);
@@ -30,7 +35,12 @@ function App() {
   const [loaded, setLoaded] = useState(false);
   const [cameras, setCameras] = useState<MediaDeviceInfo[]>([]);
   const [selectedCamera, setSelectedCamera] = useState<string>('');
-  const [uiState, setUiState] = useState({ isPinching: false, isMouthOpen: false, isFist: false });
+  const [uiState, setUiState] = useState({ 
+    isPinching: false, 
+    isMouthOpen: false, 
+    isFist: false,
+    fistTimeRemaining: FIST_CLEAR_SECONDS
+  });
   
   const [biome, setBiomeState] = useState<BiomeTheme>(BiomeTheme.Sunset);
   const [species, setSpeciesState] = useState<FlowerSpecies>(FlowerSpecies.Random);
@@ -84,6 +94,21 @@ function App() {
     };
   };
 
+  const spawnExplosion = (x: number, y: number, color: string, count: number = 20) => {
+    for (let i = 0; i < count; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 2 + Math.random() * 8;
+      particlesRef.current.push({
+        x, y,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed - 2, // Slight upward bias
+        life: 1.0,
+        color,
+        size: 2 + Math.random() * 4
+      });
+    }
+  };
+
   const createFlower = (relX: number, theme: BiomeTheme, spec: FlowerSpecies): Flower => {
     const colors = BIOME_COLORS[theme];
     const color = colors[Math.floor(Math.random() * colors.length)];
@@ -121,6 +146,7 @@ function App() {
 
     const currentTime = performance.now();
     const dt = (currentTime - lastTimeRef.current) / 16.666;
+    const dtSeconds = (currentTime - lastTimeRef.current) / 1000;
     lastTimeRef.current = currentTime;
 
     if (canvas.width !== window.innerWidth || canvas.height !== window.innerHeight) {
@@ -139,13 +165,15 @@ function App() {
     const results = currentResults || lastResultsRef.current;
     lastResultsRef.current = results;
 
-    let currentlyPinching = false, mouthOpen = false, fist = false;
+    let currentlyPinching = false, mouthOpen = false, handDetected = false, fistRaw = false;
     
     if (results?.hands?.landmarks?.length > 0) {
+      handDetected = true;
       const landmarks = results.hands.landmarks[0];
       const thumb = landmarks[4], index = landmarks[8], wrist = landmarks[0];
       const tips = [landmarks[8], landmarks[12], landmarks[16], landmarks[20]];
 
+      // Pinch check
       const distance = Math.hypot(thumb.x - index.x, thumb.y - index.y);
       if (distance < PINCH_THRESHOLD) {
         currentlyPinching = true;
@@ -159,8 +187,13 @@ function App() {
           });
         }
       }
+
+      // Robust Fist check: tips are close to wrist
       const avgDist = tips.reduce((acc, t) => acc + Math.hypot(t.x - wrist.x, t.y - wrist.y), 0) / 4;
-      if (avgDist < 0.15) fist = true;
+      // Lenient threshold 0.22 to avoid "stuck" countdown
+      if (avgDist < 0.22) {
+        fistRaw = true;
+      }
     }
 
     if (results?.faces?.faceBlendshapes?.[0]) {
@@ -170,13 +203,34 @@ function App() {
 
     isPinchingRef.current = currentlyPinching;
     isMouthOpenRef.current = mouthOpen;
-    isFistRef.current = fist;
 
-    if (fist) {
-      fistHoldFramesRef.current++;
-      if (fistHoldFramesRef.current === 25) { flowersRef.current = []; seedsRef.current = []; }
-    } else fistHoldFramesRef.current = 0;
+    // Fist Logic with Grace Period and Effect
+    if (fistRaw) {
+      fistGraceRef.current = FIST_GRACE_FRAMES;
+      isFistRef.current = true;
+      fistSecondsRef.current += dtSeconds;
+      if (fistSecondsRef.current >= FIST_CLEAR_SECONDS) {
+        // Trigger Clear!
+        flowersRef.current.forEach(f => {
+          const fx = f.relX * width;
+          const fy = groundY - (f.currentHeight * growthHeightRef.current);
+          spawnExplosion(fx, fy, f.color, 15);
+        });
+        flowersRef.current = [];
+        seedsRef.current = [];
+        fistSecondsRef.current = 0;
+        flashRef.current = 1.0;
+      }
+    } else {
+      if (fistGraceRef.current > 0) {
+        fistGraceRef.current--;
+      } else {
+        isFistRef.current = false;
+        fistSecondsRef.current = 0;
+      }
+    }
 
+    // Physics
     seedsRef.current.forEach(s => { 
       s.y += s.vy * dt; 
       s.vy += 0.5 * dt; 
@@ -200,6 +254,16 @@ function App() {
       }
     });
 
+    // Particle physics
+    particlesRef.current.forEach(p => {
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.vy += 0.2 * dt; // Gravity
+      p.life -= 0.02 * dt;
+    });
+    particlesRef.current = particlesRef.current.filter(p => p.life > 0);
+
+    // Render
     ctx.clearRect(0, 0, width, height);
 
     flowersRef.current.forEach(f => {
@@ -208,19 +272,41 @@ function App() {
       drawFlower(ctx, f, x, groundY, displayHeight);
     });
     
-    seedsRef.current.forEach(s => { 
-      drawSeed(ctx, s.x, s.y);
-    });
+    seedsRef.current.forEach(s => drawSeed(ctx, s.x, s.y));
 
-    // Darker, more grounded soil line
+    // Draw Particles (Fireworks)
+    particlesRef.current.forEach(p => {
+      ctx.globalAlpha = p.life;
+      ctx.fillStyle = p.color;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+      ctx.fill();
+    });
+    ctx.globalAlpha = 1.0;
+
+    // Ground line
     const soilGrad = ctx.createLinearGradient(0, groundY, 0, height);
     soilGrad.addColorStop(0, 'rgba(30, 15, 5, 0.5)');
     soilGrad.addColorStop(1, 'rgba(0, 0, 0, 0.9)');
     ctx.fillStyle = soilGrad;
     ctx.fillRect(0, groundY, width, height - groundY);
 
-    if (uiState.isPinching !== currentlyPinching || uiState.isMouthOpen !== mouthOpen || uiState.isFist !== fist) {
-      setUiState({ isPinching: currentlyPinching, isMouthOpen: mouthOpen, isFist: fist });
+    // Screen Flash effect
+    if (flashRef.current > 0) {
+      ctx.fillStyle = `rgba(255, 255, 255, ${flashRef.current})`;
+      ctx.fillRect(0, 0, width, height);
+      flashRef.current -= 0.05 * dt;
+    }
+
+    const currentFistRemaining = Math.max(0, FIST_CLEAR_SECONDS - fistSecondsRef.current);
+
+    if (uiState.isPinching !== currentlyPinching || uiState.isMouthOpen !== mouthOpen || uiState.isFist !== isFistRef.current || Math.abs(uiState.fistTimeRemaining - currentFistRemaining) > 0.05) {
+      setUiState({ 
+        isPinching: currentlyPinching, 
+        isMouthOpen: mouthOpen, 
+        isFist: isFistRef.current,
+        fistTimeRemaining: currentFistRemaining
+      });
     }
     
     requestRef.current = requestAnimationFrame(animate);
@@ -238,8 +324,6 @@ function App() {
   };
 
   const drawFlower = (ctx: CanvasRenderingContext2D, f: Flower, x: number, y: number, displayHeight: number) => {
-    // Requirements: Show seed if not grown yet.
-    // If growth started (currentHeight > 0), show soil mound.
     if (f.currentHeight === 0) {
       drawSeed(ctx, x, y);
       return;
@@ -248,7 +332,6 @@ function App() {
     ctx.save();
     ctx.translate(x, y);
 
-    // 1. Organic Soil Mound (only shows once growth starts)
     const moundWidth = 24 + (f.currentHeight / f.maxHeight) * 12;
     const moundHeight = 6 + (f.currentHeight / f.maxHeight) * 4;
     const moundGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, moundWidth);
@@ -260,7 +343,6 @@ function App() {
     ctx.ellipse(0, 2, moundWidth, moundHeight, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    // 2. Stem Rendering
     const h = displayHeight;
     ctx.beginPath(); 
     ctx.moveTo(0, 0);
@@ -276,12 +358,10 @@ function App() {
     ctx.lineCap = 'round';
     ctx.stroke();
 
-    // 3. Leaves along the stem
     if (h > 40) {
       const leafCount = Math.floor(h / 60) + 1;
       for (let i = 1; i <= leafCount; i++) {
         const t = (i / (leafCount + 1));
-        // Approximate position on the cubic bezier
         const lx = (1-t)**3 * 0 + 3*(1-t)**2*t * cp1x + 3*(1-t)*t**2 * cp2x + t**3 * tipX;
         const ly = (1-t)**3 * 0 + 3*(1-t)**2*t * cp1y + 3*(1-t)*t**2 * cp2y + t**3 * tipY;
         
@@ -296,7 +376,6 @@ function App() {
       }
     }
 
-    // 4. Bloom Rendering
     if (f.bloomProgress > 0) {
       ctx.translate(tipX, tipY);
       const baseScale = (f.maxHeight / 250) * growthHeightRef.current;
@@ -317,7 +396,6 @@ function App() {
     
     switch (species) {
       case FlowerSpecies.Daisy:
-        // Petals
         ctx.fillStyle = '#FFFFFF';
         for (let i = 0; i < 12; i++) {
           ctx.beginPath();
@@ -325,7 +403,6 @@ function App() {
           ctx.ellipse(18, 0, 15, 5, 0, 0, Math.PI * 2);
           ctx.fill();
         }
-        // Center
         ctx.fillStyle = '#FFD600';
         ctx.beginPath();
         ctx.arc(0, 0, 10, 0, Math.PI * 2);
@@ -333,7 +410,6 @@ function App() {
         break;
 
       case FlowerSpecies.Rose:
-        // Layered petals
         ctx.fillStyle = color;
         for (let i = 0; i < 5; i++) {
           ctx.beginPath();
@@ -352,14 +428,12 @@ function App() {
 
       case FlowerSpecies.Tulip:
         ctx.fillStyle = color;
-        // Outer
         ctx.beginPath();
         ctx.ellipse(-8, -10, 14, 22, -0.2, 0, Math.PI * 2);
         ctx.fill();
         ctx.beginPath();
         ctx.ellipse(8, -10, 14, 22, 0.2, 0, Math.PI * 2);
         ctx.fill();
-        // Inner
         ctx.fillStyle = secondaryColor;
         ctx.beginPath();
         ctx.ellipse(0, -12, 12, 24, 0, 0, Math.PI * 2);
@@ -390,7 +464,6 @@ function App() {
           ctx.ellipse(15, 0, 20, 18, 0, 0, Math.PI * 2);
           ctx.fill();
         }
-        // Dark center
         ctx.fillStyle = '#212121';
         ctx.beginPath();
         ctx.arc(0, 0, 10, 0, Math.PI * 2);
@@ -401,7 +474,6 @@ function App() {
         break;
 
       default:
-        // Generic multi-petaled flower
         ctx.fillStyle = color;
         for (let i = 0; i < 8; i++) {
           ctx.beginPath();

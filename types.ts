@@ -40,6 +40,16 @@ export interface Flower {
   stemControlPoints: Point[]; // For bezier curve randomness
 }
 
+export interface Particle {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  life: number; // 1.0 to 0
+  color: string;
+  size: number;
+}
+
 export const BIOME_COLORS: Record<BiomeTheme, string[]> = {
   [BiomeTheme.Sunset]: ['#FF9A9E', '#FECFEF', '#FF6B6B', '#FAD0C4'],
   [BiomeTheme.Ocean]: ['#4FACFE', '#00F2FE', '#43E97B', '#38F9D7'],
