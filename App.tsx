@@ -13,7 +13,6 @@ const FIST_GRACE_FRAMES = 12; // Allow some lost detection frames to prevent tim
 function App() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  // Fix: Add const declaration for requestRef
   const requestRef = useRef<number | null>(null);
   
   const seedsRef = useRef<Seed[]>([]);
@@ -101,7 +100,7 @@ function App() {
       particlesRef.current.push({
         x, y,
         vx: Math.cos(angle) * speed,
-        vy: Math.sin(angle) * speed - 2, // Slight upward bias
+        vy: Math.sin(angle) * speed - 2, 
         life: 1.0,
         color,
         size: 2 + Math.random() * 4
@@ -220,7 +219,6 @@ function App() {
         flowersRef.current = [];
         seedsRef.current = [];
         fistSecondsRef.current = 0;
-        // Flash removed as requested
       }
     } else {
       if (fistGraceRef.current > 0) {
@@ -347,37 +345,26 @@ function App() {
     ctx.lineCap = 'round';
     ctx.stroke();
 
-    // Leaf rendering logic - Updated for natural "sparse" and "alternating" look
     if (h > 60) {
-      // Larger spacing between leaves (approx 80-100 units)
       const leafCount = Math.floor(h / 90);
       for (let i = 0; i < leafCount; i++) {
-        // Calculate t for leaf position on stem
         const baseT = (i + 0.5) / (leafCount + 0.5);
-        // Add vertical jitter
         const t = Math.min(0.85, Math.max(0.15, baseT + (Math.sin(f.relX * 5 + i) * 0.1)));
 
         const px = (1-t)**3 * 0 + 3*(1-t)**2*t * cp1x + 3*(1-t)*t**2 * cp2x + t**3 * tipX;
         const py = (1-t)**3 * 0 + 3*(1-t)**2*t * cp1y + 3*(1-t)*t**2 * cp2y + t**3 * tipY;
         
-        // Determine side: alternating but with randomness tied to flower ID/position
         const isRight = (i + Math.floor(f.relX * 10)) % 2 === 0;
         const sway = Math.sin(i * 1.5 + f.relX) * 0.2;
         
         ctx.save();
         ctx.translate(px, py);
-        
-        // Leaf orientation based on side
         const angle = isRight ? (0.7 + sway) : (-0.7 + sway);
         ctx.rotate(angle);
-        
-        // Random scale for organic feel
         const scale = 0.8 + Math.abs(Math.sin(f.relX * 12 + i) * 0.5);
         ctx.scale(scale, scale);
-        
         ctx.fillStyle = '#388E3C';
         ctx.beginPath();
-        // Shift drawing slightly so it attaches to stem correctly
         const xOffset = isRight ? 8 : -8;
         ctx.ellipse(xOffset, 0, 11, 5, 0, 0, Math.PI * 2);
         ctx.fill();
@@ -402,7 +389,21 @@ function App() {
 
   const renderFlowerHead = (ctx: CanvasRenderingContext2D, f: Flower) => {
     const { species, color, secondaryColor } = f;
-    
+    const drawPetal = (w: number, h: number, c: string, stroke: boolean = true) => {
+      ctx.fillStyle = c;
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      // Create an organic heart-like petal shape
+      ctx.bezierCurveTo(-w * 0.8, -h * 0.2, -w, -h * 0.8, 0, -h);
+      ctx.bezierCurveTo(w, -h * 0.8, w * 0.8, -h * 0.2, 0, 0);
+      ctx.fill();
+      if (stroke) {
+        ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+        ctx.lineWidth = 0.8;
+        ctx.stroke();
+      }
+    };
+
     switch (species) {
       case FlowerSpecies.Daisy:
         ctx.fillStyle = '#FFFFFF';
@@ -419,20 +420,38 @@ function App() {
         break;
 
       case FlowerSpecies.Rose:
-        ctx.fillStyle = color;
+        // Artistic Rose: Multiple layers of spiraling petals
+        const roseRotation = f.relX * Math.PI; // Consistent but unique rotation per flower
+        
+        // Outer Layer: 6 large petals, more open
+        for (let i = 0; i < 6; i++) {
+          ctx.save();
+          ctx.rotate(roseRotation + (i * Math.PI * 2 / 6));
+          drawPetal(18, 24, color);
+          ctx.restore();
+        }
+        
+        // Middle Layer: 5 petals, slightly offset and more saturated
         for (let i = 0; i < 5; i++) {
-          ctx.beginPath();
-          ctx.rotate((Math.PI * 2) / 5);
-          ctx.ellipse(12, 0, 18, 14, 0, 0, Math.PI * 2);
-          ctx.fill();
+          ctx.save();
+          ctx.rotate(roseRotation + 0.5 + (i * Math.PI * 2 / 5));
+          drawPetal(14, 20, secondaryColor);
+          ctx.restore();
         }
-        ctx.fillStyle = secondaryColor;
+        
+        // Inner Layer: 3 petals, tight and compact
         for (let i = 0; i < 3; i++) {
-          ctx.beginPath();
-          ctx.rotate(1.2);
-          ctx.ellipse(6, 0, 12, 10, 0, 0, Math.PI * 2);
-          ctx.fill();
+          ctx.save();
+          ctx.rotate(roseRotation + 1.2 + (i * Math.PI * 2 / 3));
+          drawPetal(8, 14, color);
+          ctx.restore();
         }
+        
+        // Final central bud detail
+        ctx.fillStyle = secondaryColor;
+        ctx.beginPath();
+        ctx.arc(0, -2, 4, 0, Math.PI * 2);
+        ctx.fill();
         break;
 
       case FlowerSpecies.Tulip:
@@ -491,9 +510,6 @@ function App() {
           ctx.arc(Math.cos(angle) * dist, Math.sin(angle) * dist, 1.5, 0, Math.PI * 2);
           ctx.fill();
         }
-        ctx.beginPath();
-        ctx.arc(0, 0, 1.5, 0, Math.PI * 2);
-        ctx.fill();
         break;
 
       default:
