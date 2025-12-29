@@ -126,7 +126,7 @@ function App() {
 
     const width = canvas.width;
     const height = canvas.height;
-    const groundY = height - 80;
+    const groundY = height - 20; // Reduced from 80 to 20 (approx 1/4)
 
     // 获取检测结果，如果视频帧没变，沿用上一次的结果
     const currentResults = visionService.detect(video);
