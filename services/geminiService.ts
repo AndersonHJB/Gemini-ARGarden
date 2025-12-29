@@ -1,3 +1,4 @@
+
 import { GoogleGenAI } from "@google/genai";
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
@@ -15,8 +16,9 @@ export const analyzeGarden = async (imageBase64: string, flowerCount: number): P
     // Remove the data URL prefix if present
     const base64Data = imageBase64.replace(/^data:image\/(png|jpg|jpeg);base64,/, "");
 
+    // Using gemini-3-flash-preview for multimodal image analysis as per guidelines
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-3-flash-preview',
       contents: {
         parts: [
           {

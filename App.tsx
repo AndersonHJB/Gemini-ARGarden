@@ -13,7 +13,8 @@ const FIST_GRACE_FRAMES = 12; // Allow some lost detection frames to prevent tim
 function App() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const requestRef = useRef<number>(null);
+  // Fix: Add const declaration for requestRef
+  const requestRef = useRef<number | null>(null);
   
   const seedsRef = useRef<Seed[]>([]);
   const flowersRef = useRef<Flower[]>([]);
@@ -110,7 +111,6 @@ function App() {
   };
 
   const createFlower = (relX: number, theme: BiomeTheme, spec: FlowerSpecies): Flower => {
-    // Determine color pool: if RANDOM, use all available colors across all biomes
     let colorPool: string[];
     if (spec === FlowerSpecies.Random) {
       colorPool = Object.values(BIOME_COLORS).flat();
@@ -180,7 +180,6 @@ function App() {
       const thumb = landmarks[4], index = landmarks[8], wrist = landmarks[0];
       const tips = [landmarks[8], landmarks[12], landmarks[16], landmarks[20]];
 
-      // Pinch check
       const distance = Math.hypot(thumb.x - index.x, thumb.y - index.y);
       if (distance < PINCH_THRESHOLD) {
         currentlyPinching = true;
@@ -195,7 +194,6 @@ function App() {
         }
       }
 
-      // Robust Fist check: tips are close to wrist
       const avgDist = tips.reduce((acc, t) => acc + Math.hypot(t.x - wrist.x, t.y - wrist.y), 0) / 4;
       if (avgDist < 0.22) {
         fistRaw = true;
@@ -356,19 +354,39 @@ function App() {
     ctx.lineCap = 'round';
     ctx.stroke();
 
-    if (h > 40) {
-      const leafCount = Math.floor(h / 60) + 1;
-      for (let i = 1; i <= leafCount; i++) {
-        const t = (i / (leafCount + 1));
-        const lx = (1-t)**3 * 0 + 3*(1-t)**2*t * cp1x + 3*(1-t)*t**2 * cp2x + t**3 * tipX;
-        const ly = (1-t)**3 * 0 + 3*(1-t)**2*t * cp1y + 3*(1-t)*t**2 * cp2y + t**3 * tipY;
+    // Leaf rendering logic - Updated for natural "sparse" and "alternating" look
+    if (h > 60) {
+      // Larger spacing between leaves (approx 80-100 units)
+      const leafCount = Math.floor(h / 90);
+      for (let i = 0; i < leafCount; i++) {
+        // Calculate t for leaf position on stem
+        const baseT = (i + 0.5) / (leafCount + 0.5);
+        // Add vertical jitter
+        const t = Math.min(0.85, Math.max(0.15, baseT + (Math.sin(f.relX * 5 + i) * 0.1)));
+
+        const px = (1-t)**3 * 0 + 3*(1-t)**2*t * cp1x + 3*(1-t)*t**2 * cp2x + t**3 * tipX;
+        const py = (1-t)**3 * 0 + 3*(1-t)**2*t * cp1y + 3*(1-t)*t**2 * cp2y + t**3 * tipY;
+        
+        // Determine side: alternating but with randomness tied to flower ID/position
+        const isRight = (i + Math.floor(f.relX * 10)) % 2 === 0;
+        const sway = Math.sin(i * 1.5 + f.relX) * 0.2;
         
         ctx.save();
-        ctx.translate(lx, ly);
-        ctx.rotate(Math.sin(i * 1.5 + f.relX) * 0.4 + (i % 2 === 0 ? 0.8 : -0.8));
+        ctx.translate(px, py);
+        
+        // Leaf orientation based on side
+        const angle = isRight ? (0.7 + sway) : (-0.7 + sway);
+        ctx.rotate(angle);
+        
+        // Random scale for organic feel
+        const scale = 0.8 + Math.abs(Math.sin(f.relX * 12 + i) * 0.5);
+        ctx.scale(scale, scale);
+        
         ctx.fillStyle = '#388E3C';
         ctx.beginPath();
-        ctx.ellipse(8, 0, 10, 4, 0, 0, Math.PI * 2);
+        // Shift drawing slightly so it attaches to stem correctly
+        const xOffset = isRight ? 8 : -8;
+        ctx.ellipse(xOffset, 0, 11, 5, 0, 0, Math.PI * 2);
         ctx.fill();
         ctx.restore();
       }
@@ -455,14 +473,11 @@ function App() {
         break;
 
       case FlowerSpecies.Poppy:
-        // Re-implementing Poppy based on the reference image:
-        // 3 Large rounded triangular petals, and a dark seed center with white dots.
         ctx.fillStyle = color;
         for (let i = 0; i < 3; i++) {
           ctx.save();
           ctx.rotate((Math.PI * 2 / 3) * i);
           ctx.beginPath();
-          // Petal shape: a slightly squashed rounded triangle
           ctx.moveTo(0, 0);
           ctx.bezierCurveTo(-25, -20, -20, -35, 0, -35);
           ctx.bezierCurveTo(20, -35, 25, -20, 0, 0);
@@ -470,13 +485,11 @@ function App() {
           ctx.restore();
         }
         
-        // Dark Center
         ctx.fillStyle = '#1a1a1a';
         ctx.beginPath();
         ctx.arc(0, 0, 10, 0, Math.PI * 2);
         ctx.fill();
         
-        // White dots (seeds/stamens) inside the center as seen in image
         ctx.fillStyle = '#ffffff';
         for (let j = 0; j < 8; j++) {
           const angle = (Math.PI * 2 / 8) * j;
@@ -485,7 +498,6 @@ function App() {
           ctx.arc(Math.cos(angle) * dist, Math.sin(angle) * dist, 1.5, 0, Math.PI * 2);
           ctx.fill();
         }
-        // Center dot
         ctx.beginPath();
         ctx.arc(0, 0, 1.5, 0, Math.PI * 2);
         ctx.fill();
