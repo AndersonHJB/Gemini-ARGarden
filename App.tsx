@@ -126,7 +126,7 @@ function App() {
 
     const width = canvas.width;
     const height = canvas.height;
-    const groundY = height - 20; // Reduced from 80 to 20 (approx 1/4)
+    const groundY = height - 20; 
 
     // 获取检测结果，如果视频帧没变，沿用上一次的结果
     const currentResults = visionService.detect(video);
@@ -185,9 +185,22 @@ function App() {
     seedsRef.current = seedsRef.current.filter(s => s.y < groundY);
 
     flowersRef.current.forEach(f => {
+      // 这里的 targetMax 由滑块统一控制
       const targetMax = f.maxHeight * growthHeightRef.current;
       const rate = (mouthOpen ? 5.5 : 0) * dt; 
-      if (f.currentHeight < targetMax) f.currentHeight += rate;
+      
+      // 生长：只有在张嘴且高度未到 targetMax 时增加
+      if (f.currentHeight < targetMax) {
+        f.currentHeight += rate;
+        // 防止过冲
+        if (f.currentHeight > targetMax) f.currentHeight = targetMax;
+      } 
+      
+      // 统一控制：如果滑块拉小了，targetMax 变小，已长成的花朵强制同步缩小
+      if (f.currentHeight > targetMax) {
+        f.currentHeight = targetMax;
+      }
+
       if (f.currentHeight > targetMax * 0.5 && f.bloomProgress < 1) {
         f.bloomProgress += (mouthOpen ? 0.08 : 0) * dt;
       }

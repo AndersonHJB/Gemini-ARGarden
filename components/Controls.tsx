@@ -80,7 +80,7 @@ export const WorldControls: React.FC<WorldControlsProps> = ({
         <h2 className="text-[10px] font-black tracking-[0.2em] text-gray-300">GARDEN CONTROLS</h2>
       </div>
 
-      <ControlSlider label="Growth Limit" value={growthHeight} min={0.2} max={1.5} step={0.01} onChange={setGrowthHeight} unit="%" />
+      <ControlSlider label="Growth Height" value={growthHeight} min={0.2} max={1.5} step={0.01} onChange={setGrowthHeight} unit="%" />
 
       <div className="mb-6">
         <label className="text-[10px] text-gray-400 uppercase font-bold tracking-wider mb-3 block">Biome Theme</label>
