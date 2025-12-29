@@ -113,15 +113,17 @@ export const WorldControls: React.FC<WorldControlsProps> = ({
       </div>
 
       <div className="mb-6">
-        <label className="text-[10px] text-gray-400 uppercase font-bold tracking-wider mb-3 block">Plant Species</label>
+        <label className="text-[10px] text-gray-400 uppercase font-bold tracking-wider mb-3 block">Flower Species</label>
         <div className="grid grid-cols-2 gap-2">
           {Object.values(FlowerSpecies).map((s) => (
             <button
               key={s}
               onClick={() => setSpecies(s)}
               className={twMerge(
-                "py-2 rounded-md text-[9px] font-bold transition-all border",
-                species === s ? "bg-white text-black border-white" : "bg-transparent text-gray-500 border-white/10 hover:bg-white/5"
+                "py-2 rounded-md text-[9px] font-bold transition-all border uppercase tracking-widest",
+                species === s 
+                  ? "bg-pink-500 text-white border-pink-400 shadow-[0_0_10px_rgba(236,72,153,0.3)]" 
+                  : "bg-transparent text-gray-500 border-white/10 hover:bg-white/5"
               )}
             >
               {s}
