@@ -13,7 +13,6 @@ function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const requestRef = useRef<number>(null);
   
-  // 物理与状态引用的持久化
   const seedsRef = useRef<Seed[]>([]);
   const flowersRef = useRef<Flower[]>([]);
   const lastResultsRef = useRef<any>(null);
@@ -89,17 +88,26 @@ function App() {
     const colors = BIOME_COLORS[theme];
     const color = colors[Math.floor(Math.random() * colors.length)];
     const secondaryColor = colors[Math.floor(Math.random() * colors.length)];
+    
+    const speciesOptions = Object.values(FlowerSpecies).filter(s => s !== FlowerSpecies.Random);
+    const chosenSpecies = spec === FlowerSpecies.Random 
+      ? speciesOptions[Math.floor(Math.random() * speciesOptions.length)] 
+      : spec;
+
     return {
       id: Math.random().toString(36).substr(2, 9),
       relX,
-      maxHeight: 180 + Math.random() * 220,
-      currentHeight: 0, // 这里的 currentHeight 现在代表基础生长进度（未缩放）
+      maxHeight: 180 + Math.random() * 240,
+      currentHeight: 0, 
       bloomProgress: 0,
-      species: spec === FlowerSpecies.Random 
-        ? Object.values(FlowerSpecies).filter(s => s !== 'RANDOM')[Math.floor(Math.random() * 5)] 
-        : spec,
+      species: chosenSpecies,
       color, secondaryColor,
-      stemControlPoints: [{x:0,y:0}, {x:(Math.random()-0.5)*60,y:-50}, {x:(Math.random()-0.5)*60,y:-100}, {x:0,y:-150}]
+      stemControlPoints: [
+        {x: 0, y: 0}, 
+        {x: (Math.random() - 0.5) * 80, y: -50}, 
+        {x: (Math.random() - 0.5) * 80, y: -100}, 
+        {x: (Math.random() - 0.5) * 40, y: -150}
+      ]
     };
   };
 
@@ -147,7 +155,7 @@ function App() {
             id: Math.random().toString(36).substring(7) + Date.now(),
             x: pos.x,
             y: pos.y,
-            vy: 4, color: '#5D4037'
+            vy: 5, color: '#5D4037'
           });
         }
       }
@@ -157,7 +165,7 @@ function App() {
 
     if (results?.faces?.faceBlendshapes?.[0]) {
       const jaw = results.faces.faceBlendshapes[0].categories.find(b => b.categoryName === 'jawOpen')?.score || 0;
-      if (jaw > 0.25) mouthOpen = true;
+      if (jaw > 0.28) mouthOpen = true;
     }
 
     isPinchingRef.current = currentlyPinching;
@@ -182,17 +190,12 @@ function App() {
     seedsRef.current = seedsRef.current.filter(s => s.y < groundY);
 
     flowersRef.current.forEach(f => {
-      // 这里的 rate 控制基础高度的增长
       const rate = (mouthOpen ? 5.5 : 0) * dt; 
-      
-      // 增加基础高度，不再受当前滑块值的物理限制
       if (f.currentHeight < f.maxHeight) {
         f.currentHeight += rate;
         if (f.currentHeight > f.maxHeight) f.currentHeight = f.maxHeight;
       } 
-      
-      // 开花进度同样基于基础高度
-      if (f.currentHeight > f.maxHeight * 0.5 && f.bloomProgress < 1) {
+      if (f.currentHeight > f.maxHeight * 0.4 && f.bloomProgress < 1) {
         f.bloomProgress += (mouthOpen ? 0.08 : 0) * dt;
       }
     });
@@ -201,7 +204,6 @@ function App() {
 
     flowersRef.current.forEach(f => {
       const x = f.relX * width;
-      // 渲染时将滑块系数 growthHeightRef.current 应用于高度
       const displayHeight = f.currentHeight * growthHeightRef.current;
       drawFlower(ctx, f, x, groundY, displayHeight);
     });
@@ -210,8 +212,9 @@ function App() {
       drawSeed(ctx, s.x, s.y);
     });
 
+    // Darker, more grounded soil line
     const soilGrad = ctx.createLinearGradient(0, groundY, 0, height);
-    soilGrad.addColorStop(0, 'rgba(0, 0, 0, 0.4)');
+    soilGrad.addColorStop(0, 'rgba(30, 15, 5, 0.5)');
     soilGrad.addColorStop(1, 'rgba(0, 0, 0, 0.9)');
     ctx.fillStyle = soilGrad;
     ctx.fillRect(0, groundY, width, height - groundY);
@@ -225,62 +228,192 @@ function App() {
 
   const drawSeed = (ctx: CanvasRenderingContext2D, x: number, y: number) => {
     ctx.save();
-    ctx.fillStyle = '#6D4C41'; 
-    ctx.shadowBlur = 8; 
+    ctx.fillStyle = '#5D4037'; 
+    ctx.shadowBlur = 4; 
     ctx.shadowColor = 'rgba(0,0,0,0.5)';
     ctx.beginPath(); 
-    ctx.arc(x, y, 7, 0, Math.PI * 2); 
-    ctx.fill();
-    ctx.fillStyle = 'rgba(255,255,255,0.1)';
-    ctx.beginPath();
-    ctx.arc(x - 2, y - 2, 2, 0, Math.PI * 2);
+    ctx.ellipse(x, y, 6, 4, Math.PI / 6, 0, Math.PI * 2); 
     ctx.fill();
     ctx.restore();
   };
 
   const drawFlower = (ctx: CanvasRenderingContext2D, f: Flower, x: number, y: number, displayHeight: number) => {
-    // 使用基础高度判断是否还是种子状态，避免缩放导致种子大小剧烈变化
-    if (f.currentHeight < 5) {
-      drawSeed(ctx, x, y); 
+    // Requirements: Show seed if not grown yet.
+    // If growth started (currentHeight > 0), show soil mound.
+    if (f.currentHeight === 0) {
+      drawSeed(ctx, x, y);
       return;
     }
 
-    const h = displayHeight;
-
     ctx.save();
     ctx.translate(x, y);
+
+    // 1. Organic Soil Mound (only shows once growth starts)
+    const moundWidth = 24 + (f.currentHeight / f.maxHeight) * 12;
+    const moundHeight = 6 + (f.currentHeight / f.maxHeight) * 4;
+    const moundGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, moundWidth);
+    moundGrad.addColorStop(0, '#3E2723');
+    moundGrad.addColorStop(0.6, '#4E342E');
+    moundGrad.addColorStop(1, 'transparent');
+    ctx.fillStyle = moundGrad;
+    ctx.beginPath();
+    ctx.ellipse(0, 2, moundWidth, moundHeight, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 2. Stem Rendering
+    const h = displayHeight;
     ctx.beginPath(); 
     ctx.moveTo(0, 0);
-    ctx.bezierCurveTo(f.stemControlPoints[1].x, -h * 0.33, f.stemControlPoints[2].x, -h * 0.66, f.stemControlPoints[3].x, -h);
-    ctx.lineWidth = 4; ctx.strokeStyle = '#4CAF50'; ctx.stroke();
-    
-    if (f.bloomProgress > 0) {
-      ctx.translate(f.stemControlPoints[3].x, -h);
-      // 开花的大小也应该随滑块比例缩放
-      const scale = f.bloomProgress * (f.maxHeight / 220) * growthHeightRef.current;
-      ctx.scale(Math.max(0.01, scale), Math.max(0.01, scale)); 
-      ctx.shadowBlur = 20; ctx.shadowColor = f.color; ctx.fillStyle = f.color;
-      
-      if (f.species === FlowerSpecies.Daisy) {
-        ctx.fillStyle = '#FFEB3B'; ctx.beginPath(); ctx.arc(0, 0, 8, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = f.color;
-        for (let j = 0; j < 10; j++) { 
-          ctx.beginPath(); ctx.rotate((Math.PI * 2) / 10); 
-          ctx.ellipse(14, 0, 12, 5, 0, 0, Math.PI * 2); ctx.fill(); 
-        }
-      } else if (f.species === FlowerSpecies.Tulip) {
-        ctx.beginPath(); ctx.moveTo(0, 0); 
-        ctx.bezierCurveTo(18, -18, 18, -45, 0, -55); 
-        ctx.bezierCurveTo(-18, -45, -18, -18, 0, 0); ctx.fill();
-      } else if (f.species === FlowerSpecies.Rose) {
-         ctx.beginPath(); ctx.arc(0, 0, 16, 0, Math.PI*2); ctx.fill();
-         ctx.fillStyle = f.secondaryColor; ctx.beginPath(); ctx.arc(4, -4, 12, 0, Math.PI*2); ctx.fill();
-      } else {
-        ctx.beginPath(); ctx.arc(0, 0, 15, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = f.secondaryColor; ctx.beginPath(); ctx.arc(0, 0, 9, 0, Math.PI * 2); ctx.fill();
+    const cp1x = f.stemControlPoints[1].x;
+    const cp1y = -h * 0.33;
+    const cp2x = f.stemControlPoints[2].x;
+    const cp2y = -h * 0.66;
+    const tipX = f.stemControlPoints[3].x;
+    const tipY = -h;
+    ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, tipX, tipY);
+    ctx.lineWidth = 3 + (f.currentHeight / 200);
+    ctx.strokeStyle = '#2E7D32';
+    ctx.lineCap = 'round';
+    ctx.stroke();
+
+    // 3. Leaves along the stem
+    if (h > 40) {
+      const leafCount = Math.floor(h / 60) + 1;
+      for (let i = 1; i <= leafCount; i++) {
+        const t = (i / (leafCount + 1));
+        // Approximate position on the cubic bezier
+        const lx = (1-t)**3 * 0 + 3*(1-t)**2*t * cp1x + 3*(1-t)*t**2 * cp2x + t**3 * tipX;
+        const ly = (1-t)**3 * 0 + 3*(1-t)**2*t * cp1y + 3*(1-t)*t**2 * cp2y + t**3 * tipY;
+        
+        ctx.save();
+        ctx.translate(lx, ly);
+        ctx.rotate(Math.sin(i * 1.5 + f.relX) * 0.4 + (i % 2 === 0 ? 0.8 : -0.8));
+        ctx.fillStyle = '#388E3C';
+        ctx.beginPath();
+        ctx.ellipse(8, 0, 10, 4, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
       }
     }
+
+    // 4. Bloom Rendering
+    if (f.bloomProgress > 0) {
+      ctx.translate(tipX, tipY);
+      const baseScale = (f.maxHeight / 250) * growthHeightRef.current;
+      const progressScale = f.bloomProgress;
+      const finalScale = baseScale * progressScale;
+      
+      ctx.scale(Math.max(0.01, finalScale), Math.max(0.01, finalScale));
+      ctx.shadowBlur = 15;
+      ctx.shadowColor = f.color;
+      
+      renderFlowerHead(ctx, f);
+    }
     ctx.restore();
+  };
+
+  const renderFlowerHead = (ctx: CanvasRenderingContext2D, f: Flower) => {
+    const { species, color, secondaryColor } = f;
+    
+    switch (species) {
+      case FlowerSpecies.Daisy:
+        // Petals
+        ctx.fillStyle = '#FFFFFF';
+        for (let i = 0; i < 12; i++) {
+          ctx.beginPath();
+          ctx.rotate((Math.PI * 2) / 12);
+          ctx.ellipse(18, 0, 15, 5, 0, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        // Center
+        ctx.fillStyle = '#FFD600';
+        ctx.beginPath();
+        ctx.arc(0, 0, 10, 0, Math.PI * 2);
+        ctx.fill();
+        break;
+
+      case FlowerSpecies.Rose:
+        // Layered petals
+        ctx.fillStyle = color;
+        for (let i = 0; i < 5; i++) {
+          ctx.beginPath();
+          ctx.rotate((Math.PI * 2) / 5);
+          ctx.ellipse(12, 0, 18, 14, 0, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.fillStyle = secondaryColor;
+        for (let i = 0; i < 3; i++) {
+          ctx.beginPath();
+          ctx.rotate(1.2);
+          ctx.ellipse(6, 0, 12, 10, 0, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        break;
+
+      case FlowerSpecies.Tulip:
+        ctx.fillStyle = color;
+        // Outer
+        ctx.beginPath();
+        ctx.ellipse(-8, -10, 14, 22, -0.2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.ellipse(8, -10, 14, 22, 0.2, 0, Math.PI * 2);
+        ctx.fill();
+        // Inner
+        ctx.fillStyle = secondaryColor;
+        ctx.beginPath();
+        ctx.ellipse(0, -12, 12, 24, 0, 0, Math.PI * 2);
+        ctx.fill();
+        break;
+
+      case FlowerSpecies.Lily:
+        ctx.fillStyle = color;
+        for (let i = 0; i < 6; i++) {
+          ctx.beginPath();
+          ctx.rotate((Math.PI * 2) / 6);
+          ctx.moveTo(0, 0);
+          ctx.quadraticCurveTo(20, -20, 35, 0);
+          ctx.quadraticCurveTo(20, 20, 0, 0);
+          ctx.fill();
+        }
+        ctx.fillStyle = '#FBC02D';
+        ctx.beginPath();
+        ctx.arc(0, 0, 6, 0, Math.PI * 2);
+        ctx.fill();
+        break;
+
+      case FlowerSpecies.Poppy:
+        ctx.fillStyle = color;
+        for (let i = 0; i < 4; i++) {
+          ctx.beginPath();
+          ctx.rotate((Math.PI * 2) / 4);
+          ctx.ellipse(15, 0, 20, 18, 0, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        // Dark center
+        ctx.fillStyle = '#212121';
+        ctx.beginPath();
+        ctx.arc(0, 0, 10, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#FFC107';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        break;
+
+      default:
+        // Generic multi-petaled flower
+        ctx.fillStyle = color;
+        for (let i = 0; i < 8; i++) {
+          ctx.beginPath();
+          ctx.rotate((Math.PI * 2) / 8);
+          ctx.ellipse(15, 0, 12, 8, 0, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.fillStyle = secondaryColor;
+        ctx.beginPath();
+        ctx.arc(0, 0, 8, 0, Math.PI * 2);
+        ctx.fill();
+    }
   };
 
   const handleAnalyze = useCallback(async () => {
