@@ -7,13 +7,13 @@ import { BiomeTheme, BIOME_COLORS, Flower, FlowerSpecies, Point, Seed, Particle 
 import { MdAutoAwesome } from "react-icons/md";
 
 // Refined detection constants for high responsiveness
-const PINCH_THRESHOLD_START = 0.042; // More relaxed entry
-const PINCH_THRESHOLD_END = 0.055;   // Very relaxed exit to prevent flickering
-const DEPTH_THRESHOLD = 0.12;        // Significantly more tolerant of Z-axis jitter
-const STABILITY_REQUIRED_FRAMES = 1; // Instant response (1 frame instead of 3)
-const PLANTING_COOLDOWN_MS = 350;    // Slightly faster continuous seeding rate
+const PINCH_THRESHOLD_START = 0.042; 
+const PINCH_THRESHOLD_END = 0.055;   
+const DEPTH_THRESHOLD = 0.12;        
+const STABILITY_REQUIRED_FRAMES = 1; 
+const PLANTING_COOLDOWN_MS = 320;    
 
-const FIST_CLEAR_SECONDS = 2.5;      // Slightly faster clearing
+const FIST_CLEAR_SECONDS = 2.5;      
 const FIST_GRACE_FRAMES = 10;
 
 function App() {
@@ -118,6 +118,19 @@ function App() {
     }
   };
 
+  const spawnSparks = (x: number, y: number, color: string = '#FFD700') => {
+    for (let i = 0; i < 4; i++) {
+      particlesRef.current.push({
+        x, y,
+        vx: (Math.random() - 0.5) * 6,
+        vy: (Math.random() - 0.5) * 6,
+        life: 0.6 + Math.random() * 0.4,
+        color,
+        size: 1 + Math.random() * 2
+      });
+    }
+  };
+
   const createFlower = (relX: number, theme: BiomeTheme, spec: FlowerSpecies): Flower => {
     let colorPool: string[];
     if (spec === FlowerSpecies.Random) {
@@ -151,6 +164,30 @@ function App() {
     };
   };
 
+  const checkIsFist = (landmarks: any[]) => {
+    const wrist = landmarks[0];
+    const fingers = [
+      { mcp: landmarks[5], tip: landmarks[8] },   // Index
+      { mcp: landmarks[9], tip: landmarks[12] },  // Middle
+      { mcp: landmarks[13], tip: landmarks[16] }, // Ring
+      { mcp: landmarks[17], tip: landmarks[20] }  // Pinky
+    ];
+
+    let foldedCount = 0;
+    fingers.forEach(f => {
+      const distTipWrist = Math.hypot(f.tip.x - wrist.x, f.tip.y - wrist.y);
+      const distMcpWrist = Math.hypot(f.mcp.x - wrist.x, f.mcp.y - wrist.y);
+      if (distTipWrist < distMcpWrist * 1.1) { 
+        foldedCount++;
+      }
+    });
+
+    const tips = fingers.map(f => f.tip);
+    const avgDist = tips.reduce((acc, t) => acc + Math.hypot(t.x - wrist.x, t.y - wrist.y), 0) / tips.length;
+
+    return foldedCount >= 3 || avgDist < 0.18;
+  };
+
   const animate = () => {
     const canvas = canvasRef.current;
     const video = videoRef.current;
@@ -180,49 +217,36 @@ function App() {
     const results = currentResults || lastResultsRef.current;
     lastResultsRef.current = results;
 
-    let currentlyPinching = false, mouthOpen = false, fistRaw = false;
+    let currentlyPinching = false, mouthOpen = false, fistDetected = false;
     
     if (results?.hands?.landmarks?.length > 0) {
-      const landmarks = results.hands.landmarks[0];
-      const thumb = landmarks[4], index = landmarks[8], wrist = landmarks[0];
-      const tips = [landmarks[8], landmarks[12], landmarks[16], landmarks[20]];
-
-      // Improved Pinch Detection Logic
-      const dist2D = Math.hypot(thumb.x - index.x, thumb.y - index.y);
-      const distZ = Math.abs(thumb.z - index.z);
-      
-      // Use hysteresis thresholding for smoother interaction
-      const threshold = isPinchingRef.current ? PINCH_THRESHOLD_END : PINCH_THRESHOLD_START;
-      
-      if (dist2D < threshold && distZ < DEPTH_THRESHOLD) {
-        pinchStableFramesRef.current++;
-      } else {
-        pinchStableFramesRef.current = 0;
-      }
-
-      if (pinchStableFramesRef.current >= STABILITY_REQUIRED_FRAMES) {
-        currentlyPinching = true;
-        const now = Date.now();
+      results.hands.landmarks.forEach((landmarks: any[]) => {
+        const thumb = landmarks[4], indexFinger = landmarks[8];
+        const dist2D = Math.hypot(thumb.x - indexFinger.x, thumb.y - indexFinger.y);
+        const distZ = Math.abs(thumb.z - indexFinger.z);
+        const threshold = isPinchingRef.current ? PINCH_THRESHOLD_END : PINCH_THRESHOLD_START;
         
-        // Continuous Seeding: Spawn a seed if the cooldown period has passed,
-        // even if the user hasn't released the pinch.
-        if (now - lastSeedSpawnTimeRef.current > PLANTING_COOLDOWN_MS) {
-          const pos = mapCoordinates((thumb.x + index.x) / 2, (thumb.y + index.y) / 2, canvas);
-          seedsRef.current.push({
-            id: 'seed-' + Math.random().toString(36).substring(2, 7) + now,
-            x: pos.x,
-            y: pos.y,
-            vy: 4, 
-            color: '#5D4037'
-          });
-          lastSeedSpawnTimeRef.current = now;
+        if (dist2D < threshold && distZ < DEPTH_THRESHOLD) {
+          currentlyPinching = true;
+          const now = Date.now();
+          if (now - lastSeedSpawnTimeRef.current > PLANTING_COOLDOWN_MS) {
+            const pos = mapCoordinates((thumb.x + indexFinger.x) / 2, (thumb.y + indexFinger.y) / 2, canvas);
+            seedsRef.current.push({
+              id: 'gold-' + Math.random().toString(36).substring(2, 7) + now,
+              x: pos.x,
+              y: pos.y,
+              vy: 5 + Math.random() * 2, 
+              color: '#FFD700'
+            });
+            spawnSparks(pos.x, pos.y);
+            lastSeedSpawnTimeRef.current = now;
+          }
         }
-      }
-
-      const avgDist = tips.reduce((acc, t) => acc + Math.hypot(t.x - wrist.x, t.y - wrist.y), 0) / 4;
-      if (avgDist < 0.2) fistRaw = true;
+        if (checkIsFist(landmarks)) fistDetected = true;
+      });
+      if (currentlyPinching) pinchStableFramesRef.current++;
+      else pinchStableFramesRef.current = 0;
     } else {
-      // Clear state if hand is lost
       pinchStableFramesRef.current = 0;
       isPinchingRef.current = false;
     }
@@ -235,7 +259,7 @@ function App() {
     isPinchingRef.current = currentlyPinching;
     isMouthOpenRef.current = mouthOpen;
 
-    if (fistRaw) {
+    if (fistDetected) {
       fistGraceRef.current = FIST_GRACE_FRAMES;
       isFistRef.current = true;
       fistSecondsRef.current += dtSeconds;
@@ -250,23 +274,22 @@ function App() {
         fistSecondsRef.current = 0;
       }
     } else {
-      if (fistGraceRef.current > 0) {
-        fistGraceRef.current--;
-      } else {
-        isFistRef.current = false;
-        fistSecondsRef.current = 0;
-      }
+      if (fistGraceRef.current > 0) fistGraceRef.current--;
+      else { isFistRef.current = false; fistSecondsRef.current = 0; }
     }
 
     // Physics
     seedsRef.current.forEach(s => { 
       s.y += s.vy * dt; 
-      s.vy += 0.4 * dt; 
+      s.vy += 0.45 * dt; 
+      // Slight air wobble
+      s.x += Math.sin(s.y * 0.05) * 0.8 * dt;
     });
 
     const landing = seedsRef.current.filter(s => s.y >= groundY);
     landing.forEach(s => {
       const relX = s.x / width;
+      spawnSparks(s.x, groundY, '#FDB931');
       flowersRef.current.push(createFlower(relX, biomeRef.current, speciesRef.current));
     });
     seedsRef.current = seedsRef.current.filter(s => s.y < groundY);
@@ -310,8 +333,8 @@ function App() {
     ctx.globalAlpha = 1.0;
 
     const soilGrad = ctx.createLinearGradient(0, groundY, 0, height);
-    soilGrad.addColorStop(0, 'rgba(30, 15, 5, 0.4)');
-    soilGrad.addColorStop(1, 'rgba(0, 0, 0, 0.8)');
+    soilGrad.addColorStop(0, 'rgba(40, 20, 5, 0.4)');
+    soilGrad.addColorStop(1, 'rgba(0, 0, 0, 0.85)');
     ctx.fillStyle = soilGrad;
     ctx.fillRect(0, groundY, width, height - groundY);
 
@@ -331,12 +354,29 @@ function App() {
 
   const drawSeed = (ctx: CanvasRenderingContext2D, x: number, y: number) => {
     ctx.save();
-    ctx.fillStyle = '#5D4037'; 
-    ctx.shadowBlur = 4; 
-    ctx.shadowColor = 'rgba(0,0,0,0.5)';
-    ctx.beginPath(); 
-    ctx.ellipse(x, y, 6, 4, Math.PI / 6, 0, Math.PI * 2); 
+    
+    // Outer Glow
+    ctx.shadowBlur = 12;
+    ctx.shadowColor = 'rgba(255, 215, 0, 0.6)';
+
+    // Main Golden Bean Body (Radial Gradient for 3D look)
+    const gradient = ctx.createRadialGradient(x - 2, y - 2, 0, x, y, 7);
+    gradient.addColorStop(0, '#FFFACD'); // Center highlight
+    gradient.addColorStop(0.4, '#FFD700'); // Pure gold
+    gradient.addColorStop(1, '#B8860B'); // Deep gold edge
+
+    ctx.fillStyle = gradient;
+    ctx.beginPath();
+    // Slightly egg-shaped like a bean
+    ctx.ellipse(x, y, 6, 8, Math.sin(Date.now() * 0.01) * 0.2, 0, Math.PI * 2);
     ctx.fill();
+
+    // Specular Highlight (Small white dot on top-left)
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+    ctx.beginPath();
+    ctx.arc(x - 2.5, y - 3, 1.8, 0, Math.PI * 2);
+    ctx.fill();
+
     ctx.restore();
   };
 
