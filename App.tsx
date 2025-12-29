@@ -13,8 +13,12 @@ function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const requestRef = useRef<number>(null);
   
+  // 物理与状态引用的持久化
   const seedsRef = useRef<Seed[]>([]);
   const flowersRef = useRef<Flower[]>([]);
+  const lastResultsRef = useRef<any>(null);
+  const lastTimeRef = useRef<number>(performance.now());
+  
   const isPinchingRef = useRef(false);
   const isMouthOpenRef = useRef(false);
   const isFistRef = useRef(false);
@@ -64,6 +68,7 @@ function App() {
           videoRef.current.onloadedmetadata = () => {
             videoRef.current?.play();
             if (requestRef.current) cancelAnimationFrame(requestRef.current);
+            lastTimeRef.current = performance.now();
             requestRef.current = requestAnimationFrame(animate);
           };
         }
@@ -106,6 +111,11 @@ function App() {
       return; 
     }
 
+    // 计算 deltaTime (以 60fps 为基准，16.6ms 为 1.0)
+    const currentTime = performance.now();
+    const dt = (currentTime - lastTimeRef.current) / 16.666;
+    lastTimeRef.current = currentTime;
+
     if (canvas.width !== window.innerWidth || canvas.height !== window.innerHeight) {
       canvas.width = window.innerWidth;
       canvas.height = window.innerHeight;
@@ -118,7 +128,11 @@ function App() {
     const height = canvas.height;
     const groundY = height - 80;
 
-    const results = visionService.detect(video);
+    // 获取检测结果，如果视频帧没变，沿用上一次的结果
+    const currentResults = visionService.detect(video);
+    const results = currentResults || lastResultsRef.current;
+    lastResultsRef.current = results;
+
     let currentlyPinching = false, mouthOpen = false, fist = false;
     
     if (results?.hands?.landmarks?.length > 0) {
@@ -157,8 +171,12 @@ function App() {
       if (fistHoldFramesRef.current === 25) { flowersRef.current = []; seedsRef.current = []; }
     } else fistHoldFramesRef.current = 0;
 
-    // Physics
-    seedsRef.current.forEach(s => { s.y += s.vy; s.vy += 0.5; });
+    // 物理更新 (使用 dt 确保平滑)
+    seedsRef.current.forEach(s => { 
+      s.y += s.vy * dt; 
+      s.vy += 0.5 * dt; 
+    });
+
     const landing = seedsRef.current.filter(s => s.y >= groundY);
     landing.forEach(s => {
       const relX = s.x / width;
@@ -168,14 +186,14 @@ function App() {
 
     flowersRef.current.forEach(f => {
       const targetMax = f.maxHeight * growthHeightRef.current;
-      const rate = mouthOpen ? 5.5 : 0; 
+      const rate = (mouthOpen ? 5.5 : 0) * dt; 
       if (f.currentHeight < targetMax) f.currentHeight += rate;
       if (f.currentHeight > targetMax * 0.5 && f.bloomProgress < 1) {
-        f.bloomProgress += mouthOpen ? 0.08 : 0;
+        f.bloomProgress += (mouthOpen ? 0.08 : 0) * dt;
       }
     });
 
-    // Drawing
+    // 绘图
     ctx.clearRect(0, 0, width, height);
 
     // 1. 先绘制花朵和种子
@@ -188,14 +206,14 @@ function App() {
       drawSeed(ctx, s.x, s.y);
     });
 
-    // 2. 后绘制地面（土壤），通过遮挡实现“一半在地下”的效果
+    // 2. 后绘制地面（土壤）实现入土效果
     const soilGrad = ctx.createLinearGradient(0, groundY, 0, height);
-    // 增加起始不透明度，使“入土”效果更明显
     soilGrad.addColorStop(0, 'rgba(0, 0, 0, 0.4)');
     soilGrad.addColorStop(1, 'rgba(0, 0, 0, 0.9)');
     ctx.fillStyle = soilGrad;
     ctx.fillRect(0, groundY, width, height - groundY);
 
+    // 更新 UI 状态
     if (uiState.isPinching !== currentlyPinching || uiState.isMouthOpen !== mouthOpen || uiState.isFist !== fist) {
       setUiState({ isPinching: currentlyPinching, isMouthOpen: mouthOpen, isFist: fist });
     }
@@ -221,7 +239,6 @@ function App() {
   const drawFlower = (ctx: CanvasRenderingContext2D, f: Flower, x: number, y: number) => {
     const h = f.currentHeight;
 
-    // 如果高度很低，保持种子圆形。因为地面在之后绘制，这里直接传y即可实现一半被土壤遮挡。
     if (h < 5) {
       drawSeed(ctx, x, y); 
       return;
@@ -237,7 +254,7 @@ function App() {
     if (f.bloomProgress > 0) {
       ctx.translate(f.stemControlPoints[3].x, -h);
       const scale = f.bloomProgress * (f.maxHeight / 220);
-      ctx.scale(scale, scale);
+      ctx.scale(scale, Math.max(0.1, scale)); // 防止 scale 为 0 报错
       ctx.shadowBlur = 20; ctx.shadowColor = f.color; ctx.fillStyle = f.color;
       
       if (f.species === FlowerSpecies.Daisy) {
