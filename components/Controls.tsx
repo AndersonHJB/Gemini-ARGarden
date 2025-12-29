@@ -15,6 +15,7 @@ interface WorldControlsProps {
   setBiome: (b: BiomeTheme) => void;
   species: FlowerSpecies;
   setSpecies: (s: FlowerSpecies) => void;
+  onApplySpeciesToAll: () => void;
   growthHeight: number;
   setGrowthHeight: (h: number) => void;
   cameras: MediaDeviceInfo[];
@@ -81,7 +82,7 @@ const ControlSlider = ({ label, value, min, max, step, onChange, unit = "" }: an
 );
 
 export const WorldControls: React.FC<WorldControlsProps> = ({
-  biome, setBiome, species, setSpecies, growthHeight, setGrowthHeight, 
+  biome, setBiome, species, setSpecies, onApplySpeciesToAll, growthHeight, setGrowthHeight, 
   cameras, selectedCamera, setSelectedCamera
 }) => {
   return (
@@ -113,7 +114,15 @@ export const WorldControls: React.FC<WorldControlsProps> = ({
       </div>
 
       <div className="mb-6">
-        <label className="text-[10px] text-gray-400 uppercase font-bold tracking-wider mb-3 block">Flower Species</label>
+        <div className="flex justify-between items-center mb-3">
+          <label className="text-[10px] text-gray-400 uppercase font-bold tracking-wider block">Flower Species</label>
+          <button 
+            onClick={onApplySpeciesToAll}
+            className="text-[8px] font-black tracking-widest text-pink-400 border border-pink-400/30 px-2 py-0.5 rounded hover:bg-pink-400/10 active:scale-95 transition-all"
+          >
+            APPLY TO ALL
+          </button>
+        </div>
         <div className="grid grid-cols-2 gap-2">
           {Object.values(FlowerSpecies).map((s) => (
             <button

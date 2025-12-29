@@ -27,7 +27,6 @@ function App() {
   const isFistRef = useRef(false);
   const fistSecondsRef = useRef(0);
   const fistGraceRef = useRef(0);
-  const flashRef = useRef(0);
   
   const biomeRef = useRef<BiomeTheme>(BiomeTheme.Sunset);
   const speciesRef = useRef<FlowerSpecies>(FlowerSpecies.Random);
@@ -512,6 +511,18 @@ function App() {
     }
   };
 
+  const handleApplySpeciesToAll = useCallback(() => {
+    const currentSpecies = speciesRef.current;
+    const speciesOptions = Object.values(FlowerSpecies).filter(s => s !== FlowerSpecies.Random);
+    
+    flowersRef.current = flowersRef.current.map(f => ({
+      ...f,
+      species: currentSpecies === FlowerSpecies.Random 
+        ? speciesOptions[Math.floor(Math.random() * speciesOptions.length)]
+        : currentSpecies
+    }));
+  }, []);
+
   const handleAnalyze = useCallback(async () => {
     if (!canvasRef.current) return;
     setIsAnalyzing(true);
@@ -534,6 +545,7 @@ function App() {
         <WorldControls 
           biome={biome} setBiome={setBiomeState}
           species={species} setSpecies={setSpeciesState}
+          onApplySpeciesToAll={handleApplySpeciesToAll}
           growthHeight={growthHeight} setGrowthHeight={setGrowthHeightState}
           cameras={cameras} selectedCamera={selectedCamera} setSelectedCamera={setSelectedCamera}
         />
