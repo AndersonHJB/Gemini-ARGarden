@@ -221,7 +221,7 @@ function App() {
         flowersRef.current = [];
         seedsRef.current = [];
         fistSecondsRef.current = 0;
-        flashRef.current = 1.0;
+        // Flash removed as requested
       }
     } else {
       if (fistGraceRef.current > 0) {
@@ -287,12 +287,6 @@ function App() {
     soilGrad.addColorStop(1, 'rgba(0, 0, 0, 0.9)');
     ctx.fillStyle = soilGrad;
     ctx.fillRect(0, groundY, width, height - groundY);
-
-    if (flashRef.current > 0) {
-      ctx.fillStyle = `rgba(255, 255, 255, ${flashRef.current})`;
-      ctx.fillRect(0, 0, width, height);
-      flashRef.current -= 0.05 * dt;
-    }
 
     const currentFistRemaining = Math.max(0, FIST_CLEAR_SECONDS - fistSecondsRef.current);
 
