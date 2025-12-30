@@ -1,7 +1,8 @@
 
 import React from 'react';
-import { BiomeTheme, BIOME_COLORS, FlowerSpecies } from '../types';
+import { BiomeTheme, BIOME_COLORS, FlowerSpecies, BackgroundMode } from '../types';
 import { twMerge } from 'tailwind-merge';
+import { MdCameraAlt, MdBrush, MdVideocam } from "react-icons/md";
 
 interface StatusPanelProps {
   isPinching: boolean;
@@ -22,6 +23,9 @@ interface WorldControlsProps {
   cameras: MediaDeviceInfo[];
   selectedCamera: string;
   setSelectedCamera: (id: string) => void;
+  bgMode: BackgroundMode;
+  setBgMode: (m: BackgroundMode) => void;
+  onCapture: () => void;
 }
 
 export const StatusPanel: React.FC<StatusPanelProps> = ({ isPinching, isMouthOpen, isFist, fistTimeRemaining }) => {
@@ -84,15 +88,46 @@ const ControlSlider = ({ label, value, min, max, step, onChange, unit = "" }: an
 
 export const WorldControls: React.FC<WorldControlsProps> = ({
   biome, setBiome, onApplyBiomeToAll, species, setSpecies, onApplySpeciesToAll, growthHeight, setGrowthHeight, 
-  cameras, selectedCamera, setSelectedCamera
+  cameras, selectedCamera, setSelectedCamera, bgMode, setBgMode, onCapture
 }) => {
   return (
     <div className="absolute top-6 right-6 w-72 bg-black/60 backdrop-blur-2xl rounded-2xl p-5 text-white border border-white/10 shadow-2xl z-20 overflow-y-auto max-h-[85vh]">
       <div className="flex justify-between items-center mb-6 border-b border-white/10 pb-3">
         <h2 className="text-[10px] font-black tracking-[0.2em] text-gray-300">GARDEN CONTROLS</h2>
+        <button 
+          onClick={onCapture}
+          className="p-2 bg-pink-500 hover:bg-pink-600 rounded-full transition-colors group"
+          title="Capture Screenshot"
+        >
+          <MdCameraAlt className="text-sm group-active:scale-90 transition-transform" />
+        </button>
       </div>
 
       <ControlSlider label="Growth Height" value={growthHeight} min={0.2} max={1.5} step={0.01} onChange={setGrowthHeight} unit="%" />
+
+      <div className="mb-6">
+        <label className="text-[10px] text-gray-400 uppercase font-bold tracking-wider mb-3 block">Background Style</label>
+        <div className="flex gap-2">
+          <button 
+            onClick={() => setBgMode(BackgroundMode.Camera)}
+            className={twMerge(
+              "flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-[9px] font-bold tracking-widest border transition-all",
+              bgMode === BackgroundMode.Camera ? "bg-white text-black border-white" : "bg-transparent text-gray-500 border-white/10 hover:bg-white/5"
+            )}
+          >
+            <MdVideocam className="text-sm" /> CAMERA
+          </button>
+          <button 
+            onClick={() => setBgMode(BackgroundMode.Artistic)}
+            className={twMerge(
+              "flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-[9px] font-bold tracking-widest border transition-all",
+              bgMode === BackgroundMode.Artistic ? "bg-white text-black border-white" : "bg-transparent text-gray-500 border-white/10 hover:bg-white/5"
+            )}
+          >
+            <MdBrush className="text-sm" /> ARTISTIC
+          </button>
+        </div>
+      </div>
 
       <div className="mb-6">
         <div className="flex justify-between items-center mb-3">

@@ -3,8 +3,8 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { visionService } from './services/visionService';
 import { analyzeGarden } from './services/geminiService';
 import { StatusPanel, WorldControls } from './components/Controls';
-import { BiomeTheme, BIOME_COLORS, Flower, FlowerSpecies, Point, Seed, Particle } from './types';
-import { MdAutoAwesome } from "react-icons/md";
+import { BiomeTheme, BIOME_COLORS, Flower, FlowerSpecies, Point, Seed, Particle, BackgroundMode, ARTISTIC_BG } from './types';
+import { MdAutoAwesome, MdDownload, MdClose } from "react-icons/md";
 
 // Refined detection constants for high responsiveness
 const PINCH_THRESHOLD_START = 0.042; 
@@ -40,6 +40,7 @@ function App() {
   const biomeRef = useRef<BiomeTheme>(BiomeTheme.Sunset);
   const speciesRef = useRef<FlowerSpecies>(FlowerSpecies.Random);
   const growthHeightRef = useRef(1.0);
+  const bgModeRef = useRef<BackgroundMode>(BackgroundMode.Camera);
 
   const [loaded, setLoaded] = useState(false);
   const [cameras, setCameras] = useState<MediaDeviceInfo[]>([]);
@@ -54,13 +55,16 @@ function App() {
   const [biome, setBiomeState] = useState<BiomeTheme>(BiomeTheme.Sunset);
   const [species, setSpeciesState] = useState<FlowerSpecies>(FlowerSpecies.Random);
   const [growthHeight, setGrowthHeightState] = useState(1.0);
+  const [bgMode, setBgMode] = useState<BackgroundMode>(BackgroundMode.Camera);
 
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<string | null>(null);
+  const [capturedImage, setCapturedImage] = useState<string | null>(null);
 
   useEffect(() => { biomeRef.current = biome; }, [biome]);
   useEffect(() => { speciesRef.current = species; }, [species]);
   useEffect(() => { growthHeightRef.current = growthHeight; }, [growthHeight]);
+  useEffect(() => { bgModeRef.current = bgMode; }, [bgMode]);
 
   useEffect(() => {
     const init = async () => {
@@ -188,6 +192,39 @@ function App() {
     return foldedCount >= 3 || avgDist < 0.18;
   };
 
+  const drawArtisticBackground = (ctx: CanvasRenderingContext2D, width: number, height: number, theme: BiomeTheme) => {
+    const config = ARTISTIC_BG[theme];
+    
+    // Sky Gradient
+    const skyGrad = ctx.createLinearGradient(0, 0, 0, height);
+    config.sky.forEach((color, i) => skyGrad.addColorStop(i / (config.sky.length - 1), color));
+    ctx.fillStyle = skyGrad;
+    ctx.fillRect(0, 0, width, height);
+
+    // Accent (Sun/Moon)
+    ctx.save();
+    ctx.fillStyle = config.accent;
+    ctx.globalAlpha = 0.8;
+    ctx.shadowBlur = 40;
+    ctx.shadowColor = config.accent;
+    ctx.beginPath();
+    ctx.arc(width * 0.75, height * 0.25, 60, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+    // Abstract Ground Geometric Shapes
+    ctx.fillStyle = config.ground;
+    ctx.beginPath();
+    ctx.moveTo(0, height * 0.85);
+    ctx.lineTo(width * 0.4, height * 0.75);
+    ctx.lineTo(width * 0.7, height * 0.88);
+    ctx.lineTo(width, height * 0.82);
+    ctx.lineTo(width, height);
+    ctx.lineTo(0, height);
+    ctx.closePath();
+    ctx.fill();
+  };
+
   const animate = () => {
     const canvas = canvasRef.current;
     const video = videoRef.current;
@@ -282,7 +319,6 @@ function App() {
     seedsRef.current.forEach(s => { 
       s.y += s.vy * dt; 
       s.vy += 0.45 * dt; 
-      // Slight air wobble
       s.x += Math.sin(s.y * 0.05) * 0.8 * dt;
     });
 
@@ -315,6 +351,11 @@ function App() {
 
     ctx.clearRect(0, 0, width, height);
 
+    // If Artistic Background is active, draw it first
+    if (bgModeRef.current === BackgroundMode.Artistic) {
+      drawArtisticBackground(ctx, width, height, biomeRef.current);
+    }
+
     flowersRef.current.forEach(f => {
       const x = f.relX * width;
       const displayHeight = f.currentHeight * growthHeightRef.current;
@@ -332,6 +373,7 @@ function App() {
     });
     ctx.globalAlpha = 1.0;
 
+    // Soil layer
     const soilGrad = ctx.createLinearGradient(0, groundY, 0, height);
     soilGrad.addColorStop(0, 'rgba(40, 20, 5, 0.4)');
     soilGrad.addColorStop(1, 'rgba(0, 0, 0, 0.85)');
@@ -354,29 +396,20 @@ function App() {
 
   const drawSeed = (ctx: CanvasRenderingContext2D, x: number, y: number) => {
     ctx.save();
-    
-    // Outer Glow
     ctx.shadowBlur = 12;
     ctx.shadowColor = 'rgba(255, 215, 0, 0.6)';
-
-    // Main Golden Bean Body (Radial Gradient for 3D look)
     const gradient = ctx.createRadialGradient(x - 2, y - 2, 0, x, y, 7);
-    gradient.addColorStop(0, '#FFFACD'); // Center highlight
-    gradient.addColorStop(0.4, '#FFD700'); // Pure gold
-    gradient.addColorStop(1, '#B8860B'); // Deep gold edge
-
+    gradient.addColorStop(0, '#FFFACD'); 
+    gradient.addColorStop(0.4, '#FFD700'); 
+    gradient.addColorStop(1, '#B8860B'); 
     ctx.fillStyle = gradient;
     ctx.beginPath();
-    // Slightly egg-shaped like a bean
     ctx.ellipse(x, y, 6, 8, Math.sin(Date.now() * 0.01) * 0.2, 0, Math.PI * 2);
     ctx.fill();
-
-    // Specular Highlight (Small white dot on top-left)
     ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
     ctx.beginPath();
     ctx.arc(x - 2.5, y - 3, 1.8, 0, Math.PI * 2);
     ctx.fill();
-
     ctx.restore();
   };
 
@@ -385,10 +418,8 @@ function App() {
       drawSeed(ctx, x, y);
       return;
     }
-
     ctx.save();
     ctx.translate(x, y);
-
     const moundWidth = 24 + (f.currentHeight / f.maxHeight) * 12;
     const moundHeight = 6 + (f.currentHeight / f.maxHeight) * 4;
     const moundGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, moundWidth);
@@ -399,7 +430,6 @@ function App() {
     ctx.beginPath();
     ctx.ellipse(0, 2, moundWidth, moundHeight, 0, 0, Math.PI * 2);
     ctx.fill();
-
     const h = displayHeight;
     ctx.beginPath(); 
     ctx.moveTo(0, 0);
@@ -414,19 +444,15 @@ function App() {
     ctx.strokeStyle = '#2E7D32';
     ctx.lineCap = 'round';
     ctx.stroke();
-
     if (h > 60) {
       const leafCount = Math.floor(h / 90);
       for (let i = 0; i < leafCount; i++) {
         const baseT = (i + 0.5) / (leafCount + 0.5);
         const t = Math.min(0.85, Math.max(0.15, baseT + (Math.sin(f.relX * 5 + i) * 0.1)));
-
         const px = (1-t)**3 * 0 + 3*(1-t)**2*t * cp1x + 3*(1-t)*t**2 * cp2x + t**3 * tipX;
         const py = (1-t)**3 * 0 + 3*(1-t)**2*t * cp1y + 3*(1-t)*t**2 * cp2y + t**3 * tipY;
-        
         const isRight = (i + Math.floor(f.relX * 10)) % 2 === 0;
         const sway = Math.sin(i * 1.5 + f.relX) * 0.2;
-        
         ctx.save();
         ctx.translate(px, py);
         const angle = isRight ? (0.7 + sway) : (-0.7 + sway);
@@ -441,17 +467,14 @@ function App() {
         ctx.restore();
       }
     }
-
     if (f.bloomProgress > 0) {
       ctx.translate(tipX, tipY);
       const baseScale = (f.maxHeight / 250) * growthHeightRef.current;
       const progressScale = f.bloomProgress;
       const finalScale = baseScale * progressScale;
-      
       ctx.scale(Math.max(0.01, finalScale), Math.max(0.01, finalScale));
       ctx.shadowBlur = 15;
       ctx.shadowColor = f.color;
-      
       renderFlowerHead(ctx, f);
     }
     ctx.restore();
@@ -487,7 +510,6 @@ function App() {
         ctx.arc(0, 0, 10, 0, Math.PI * 2);
         ctx.fill();
         break;
-
       case FlowerSpecies.Rose:
         const roseRotation = f.relX * Math.PI; 
         for (let i = 0; i < 6; i++) {
@@ -513,7 +535,6 @@ function App() {
         ctx.arc(0, -2, 4, 0, Math.PI * 2);
         ctx.fill();
         break;
-
       case FlowerSpecies.Tulip:
         ctx.fillStyle = color;
         ctx.beginPath();
@@ -527,7 +548,6 @@ function App() {
         ctx.ellipse(0, -12, 12, 24, 0, 0, Math.PI * 2);
         ctx.fill();
         break;
-
       case FlowerSpecies.Lily:
         ctx.fillStyle = color;
         for (let i = 0; i < 6; i++) {
@@ -543,7 +563,6 @@ function App() {
         ctx.arc(0, 0, 6, 0, Math.PI * 2);
         ctx.fill();
         break;
-
       case FlowerSpecies.Poppy:
         ctx.fillStyle = color;
         for (let i = 0; i < 3; i++) {
@@ -569,7 +588,6 @@ function App() {
           ctx.fill();
         }
         break;
-
       default:
         ctx.fillStyle = color;
         for (let i = 0; i < 8; i++) {
@@ -588,7 +606,6 @@ function App() {
   const handleApplySpeciesToAll = useCallback(() => {
     const currentSpecies = speciesRef.current;
     const speciesOptions = Object.values(FlowerSpecies).filter(s => s !== FlowerSpecies.Random);
-    
     flowersRef.current = flowersRef.current.map(f => ({
       ...f,
       species: currentSpecies === FlowerSpecies.Random 
@@ -600,7 +617,6 @@ function App() {
   const handleApplyBiomeToAll = useCallback(() => {
     const currentBiome = biomeRef.current;
     const colorPool = BIOME_COLORS[currentBiome];
-    
     flowersRef.current = flowersRef.current.map(f => ({
       ...f,
       color: colorPool[Math.floor(Math.random() * colorPool.length)],
@@ -615,12 +631,53 @@ function App() {
     setIsAnalyzing(false);
   }, []);
 
+  const handleCapture = useCallback(() => {
+    const canvas = canvasRef.current;
+    const video = videoRef.current;
+    if (!canvas || !video) return;
+
+    // Create a temporary canvas to combine everything
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = canvas.width;
+    tempCanvas.height = canvas.height;
+    const tctx = tempCanvas.getContext('2d');
+    if (!tctx) return;
+
+    if (bgMode === BackgroundMode.Camera) {
+      // Draw mirrored camera frame
+      tctx.save();
+      tctx.scale(-1, 1);
+      tctx.drawImage(video, -tempCanvas.width, 0, tempCanvas.width, tempCanvas.height);
+      tctx.restore();
+    } else {
+      // Draw artistic background
+      drawArtisticBackground(tctx, tempCanvas.width, tempCanvas.height, biome);
+    }
+
+    // Draw the main overlay canvas (flowers, etc.) on top
+    // Since the main canvas is already mirrored, we need to handle it properly
+    tctx.save();
+    tctx.scale(-1, 1);
+    tctx.drawImage(canvas, -tempCanvas.width, 0, tempCanvas.width, tempCanvas.height);
+    tctx.restore();
+
+    setCapturedImage(tempCanvas.toDataURL('image/png'));
+  }, [bgMode, biome]);
+
+  const downloadCapturedImage = () => {
+    if (!capturedImage) return;
+    const link = document.createElement('a');
+    link.href = capturedImage;
+    link.download = `my-gemini-garden-${Date.now()}.png`;
+    link.click();
+  };
+
   return (
     <div className="fixed inset-0 bg-black overflow-hidden select-none font-sans text-white">
       <div className="relative w-full h-full">
         <video 
           ref={videoRef} 
-          style={{ transform: `scaleX(-1)` }}
+          style={{ transform: `scaleX(-1)`, visibility: bgMode === BackgroundMode.Camera ? 'visible' : 'hidden' }}
           className="absolute inset-0 w-full h-full object-fill opacity-70" 
           playsInline muted 
         />
@@ -634,6 +691,8 @@ function App() {
           onApplySpeciesToAll={handleApplySpeciesToAll}
           growthHeight={growthHeight} setGrowthHeight={setGrowthHeightState}
           cameras={cameras} selectedCamera={selectedCamera} setSelectedCamera={setSelectedCamera}
+          bgMode={bgMode} setBgMode={setBgMode}
+          onCapture={handleCapture}
         />
 
         <div className="absolute bottom-10 left-1/2 -translate-x-1/2 z-20">
@@ -644,12 +703,49 @@ function App() {
           </button>
         </div>
 
+        {/* Gemini Analysis Modal */}
         {analysisResult && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/70 backdrop-blur-md z-30 p-6">
              <div className="bg-[#0f0f0f] p-10 rounded-3xl max-w-xl text-center border border-white/10 shadow-2xl relative">
                 <div className="absolute top-0 left-1/2 -translate-x-1/2 w-20 h-1 bg-pink-500 rounded-b-lg"></div>
                 <p className="text-white text-xl font-light leading-relaxed mb-8 italic">"{analysisResult}"</p>
                 <button onClick={() => setAnalysisResult(null)} className="px-10 py-3 bg-white text-black rounded-full font-bold text-[10px] tracking-widest uppercase hover:bg-gray-200 transition-colors">BACK TO GARDEN</button>
+             </div>
+          </div>
+        )}
+
+        {/* Screenshot Modal */}
+        {capturedImage && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/90 backdrop-blur-xl z-40 p-4">
+             <div className="bg-white/5 p-4 rounded-3xl max-w-2xl w-full border border-white/10 shadow-2xl flex flex-col items-center">
+                <div className="flex justify-between w-full mb-4 px-2">
+                   <h3 className="text-[10px] font-black tracking-[0.2em] text-pink-400 uppercase">GARDEN CAPTURED</h3>
+                   <button onClick={() => setCapturedImage(null)} className="text-white hover:text-pink-400 transition-colors">
+                      <MdClose className="text-xl" />
+                   </button>
+                </div>
+                
+                <div className="relative w-full rounded-2xl overflow-hidden border border-white/10 mb-6 bg-black">
+                   <img src={capturedImage} alt="Captured Garden" className="w-full h-auto block" />
+                   <div className="absolute inset-0 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity bg-black/40 pointer-events-none">
+                      <p className="text-[10px] font-bold tracking-widest text-white uppercase">Long press to save on mobile</p>
+                   </div>
+                </div>
+
+                <div className="flex gap-4 w-full">
+                  <button 
+                    onClick={downloadCapturedImage} 
+                    className="flex-1 flex items-center justify-center gap-3 py-4 bg-white text-black rounded-xl font-bold text-[10px] tracking-widest uppercase hover:bg-pink-400 hover:text-white transition-all active:scale-95"
+                  >
+                    <MdDownload className="text-lg" /> DOWNLOAD IMAGE
+                  </button>
+                  <button 
+                    onClick={() => setCapturedImage(null)} 
+                    className="px-6 py-4 bg-white/5 text-white border border-white/10 rounded-xl font-bold text-[10px] tracking-widest uppercase hover:bg-white/10 transition-all"
+                  >
+                    DISCARD
+                  </button>
+                </div>
              </div>
           </div>
         )}
