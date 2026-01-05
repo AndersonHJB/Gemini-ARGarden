@@ -7,14 +7,13 @@ import { BiomeTheme, BIOME_COLORS, Flower, FlowerSpecies, Point, Seed, Particle,
 import { MdAutoAwesome, MdDownload, MdClose } from "react-icons/md";
 
 // Refined detection constants for high responsiveness
-const PINCH_THRESHOLD_START = 0.042; 
-const PINCH_THRESHOLD_END = 0.055;   
-const DEPTH_THRESHOLD = 0.12;        
-const STABILITY_REQUIRED_FRAMES = 1; 
-const PLANTING_COOLDOWN_MS = 320;    
+const PINCH_THRESHOLD_START = 0.045; 
+const PINCH_THRESHOLD_END = 0.060;   
+const DEPTH_THRESHOLD = 0.15;        
+const PLANTING_COOLDOWN_MS = 250;    
 
-const FIST_CLEAR_SECONDS = 2.5;      
-const FIST_GRACE_FRAMES = 10;
+const FIST_CLEAR_SECONDS = 2.0;      
+const FIST_GRACE_FRAMES = 12;
 
 function App() {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -28,7 +27,6 @@ function App() {
   const lastTimeRef = useRef<number>(performance.now());
   
   // Hand state tracking
-  const pinchStableFramesRef = useRef(0);
   const lastSeedSpawnTimeRef = useRef(0);
   const isPinchingRef = useRef(false);
   
@@ -43,6 +41,7 @@ function App() {
   const bgModeRef = useRef<BackgroundMode>(BackgroundMode.Camera);
 
   const [loaded, setLoaded] = useState(false);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [cameras, setCameras] = useState<MediaDeviceInfo[]>([]);
   const [selectedCamera, setSelectedCamera] = useState<string>('');
   const [uiState, setUiState] = useState({ 
@@ -123,14 +122,14 @@ function App() {
   };
 
   const spawnSparks = (x: number, y: number, color: string = '#FFD700') => {
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < 6; i++) {
       particlesRef.current.push({
         x, y,
-        vx: (Math.random() - 0.5) * 6,
-        vy: (Math.random() - 0.5) * 6,
+        vx: (Math.random() - 0.5) * 8,
+        vy: (Math.random() - 0.5) * 8,
         life: 0.6 + Math.random() * 0.4,
         color,
-        size: 1 + Math.random() * 2
+        size: 1.5 + Math.random() * 2.5
       });
     }
   };
@@ -181,27 +180,18 @@ function App() {
     fingers.forEach(f => {
       const distTipWrist = Math.hypot(f.tip.x - wrist.x, f.tip.y - wrist.y);
       const distMcpWrist = Math.hypot(f.mcp.x - wrist.x, f.mcp.y - wrist.y);
-      if (distTipWrist < distMcpWrist * 1.1) { 
-        foldedCount++;
-      }
+      if (distTipWrist < distMcpWrist * 1.1) foldedCount++;
     });
-
-    const tips = fingers.map(f => f.tip);
-    const avgDist = tips.reduce((acc, t) => acc + Math.hypot(t.x - wrist.x, t.y - wrist.y), 0) / tips.length;
-
-    return foldedCount >= 3 || avgDist < 0.18;
+    return foldedCount >= 3;
   };
 
   const drawArtisticBackground = (ctx: CanvasRenderingContext2D, width: number, height: number, theme: BiomeTheme) => {
     const config = ARTISTIC_BG[theme];
-    
-    // Sky Gradient
     const skyGrad = ctx.createLinearGradient(0, 0, 0, height);
     config.sky.forEach((color, i) => skyGrad.addColorStop(i / (config.sky.length - 1), color));
     ctx.fillStyle = skyGrad;
     ctx.fillRect(0, 0, width, height);
 
-    // Accent (Sun/Moon)
     ctx.save();
     ctx.fillStyle = config.accent;
     ctx.globalAlpha = 0.8;
@@ -212,7 +202,6 @@ function App() {
     ctx.fill();
     ctx.restore();
 
-    // Abstract Ground Geometric Shapes
     ctx.fillStyle = config.ground;
     ctx.beginPath();
     ctx.moveTo(0, height * 0.85);
@@ -224,6 +213,20 @@ function App() {
     ctx.closePath();
     ctx.fill();
   };
+
+  const handleClearGarden = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const width = canvas.width;
+    const groundY = canvas.height - 20;
+    flowersRef.current.forEach(f => {
+      const fx = f.relX * width;
+      const fy = groundY - (f.currentHeight * growthHeightRef.current);
+      spawnExplosion(fx, fy, f.color, 15);
+    });
+    flowersRef.current = [];
+    seedsRef.current = [];
+  }, []);
 
   const animate = () => {
     const canvas = canvasRef.current;
@@ -269,28 +272,25 @@ function App() {
           if (now - lastSeedSpawnTimeRef.current > PLANTING_COOLDOWN_MS) {
             const pos = mapCoordinates((thumb.x + indexFinger.x) / 2, (thumb.y + indexFinger.y) / 2, canvas);
             seedsRef.current.push({
-              id: 'gold-' + Math.random().toString(36).substring(2, 7) + now,
+              id: 'seed-' + Math.random().toString(36).substring(2, 7) + now,
               x: pos.x,
               y: pos.y,
-              vy: 5 + Math.random() * 2, 
+              vy: 6 + Math.random() * 3, 
               color: '#FFD700'
             });
-            spawnSparks(pos.x, pos.y);
+            spawnSparks(pos.x, pos.y, '#FFFACD');
             lastSeedSpawnTimeRef.current = now;
           }
         }
         if (checkIsFist(landmarks)) fistDetected = true;
       });
-      if (currentlyPinching) pinchStableFramesRef.current++;
-      else pinchStableFramesRef.current = 0;
     } else {
-      pinchStableFramesRef.current = 0;
       isPinchingRef.current = false;
     }
 
     if (results?.faces?.faceBlendshapes?.[0]) {
       const jaw = results.faces.faceBlendshapes[0].categories.find(b => b.categoryName === 'jawOpen')?.score || 0;
-      if (jaw > 0.25) mouthOpen = true;
+      if (jaw > 0.3) mouthOpen = true;
     }
 
     isPinchingRef.current = currentlyPinching;
@@ -301,13 +301,7 @@ function App() {
       isFistRef.current = true;
       fistSecondsRef.current += dtSeconds;
       if (fistSecondsRef.current >= FIST_CLEAR_SECONDS) {
-        flowersRef.current.forEach(f => {
-          const fx = f.relX * width;
-          const fy = groundY - (f.currentHeight * growthHeightRef.current);
-          spawnExplosion(fx, fy, f.color, 12);
-        });
-        flowersRef.current = [];
-        seedsRef.current = [];
+        handleClearGarden();
         fistSecondsRef.current = 0;
       }
     } else {
@@ -318,8 +312,8 @@ function App() {
     // Physics
     seedsRef.current.forEach(s => { 
       s.y += s.vy * dt; 
-      s.vy += 0.45 * dt; 
-      s.x += Math.sin(s.y * 0.05) * 0.8 * dt;
+      s.vy += 0.5 * dt; 
+      s.x += Math.sin(s.y * 0.04) * 1.2 * dt;
     });
 
     const landing = seedsRef.current.filter(s => s.y >= groundY);
@@ -331,27 +325,26 @@ function App() {
     seedsRef.current = seedsRef.current.filter(s => s.y < groundY);
 
     flowersRef.current.forEach(f => {
-      const rate = (mouthOpen ? 5.5 : 0) * dt; 
+      const rate = (mouthOpen ? 6.0 : 0) * dt; 
       if (f.currentHeight < f.maxHeight) {
         f.currentHeight += rate;
         if (f.currentHeight > f.maxHeight) f.currentHeight = f.maxHeight;
       } 
-      if (f.currentHeight > f.maxHeight * 0.4 && f.bloomProgress < 1) {
-        f.bloomProgress += (mouthOpen ? 0.08 : 0) * dt;
+      if (f.currentHeight > f.maxHeight * 0.3 && f.bloomProgress < 1) {
+        f.bloomProgress += (mouthOpen ? 0.09 : 0) * dt;
       }
     });
 
     particlesRef.current.forEach(p => {
       p.x += p.vx * dt;
       p.y += p.vy * dt;
-      p.vy += 0.2 * dt; 
-      p.life -= 0.02 * dt;
+      p.vy += 0.25 * dt; 
+      p.life -= 0.025 * dt;
     });
     particlesRef.current = particlesRef.current.filter(p => p.life > 0);
 
     ctx.clearRect(0, 0, width, height);
 
-    // If Artistic Background is active, draw it first
     if (bgModeRef.current === BackgroundMode.Artistic) {
       drawArtisticBackground(ctx, width, height, biomeRef.current);
     }
@@ -373,10 +366,9 @@ function App() {
     });
     ctx.globalAlpha = 1.0;
 
-    // Soil layer
     const soilGrad = ctx.createLinearGradient(0, groundY, 0, height);
-    soilGrad.addColorStop(0, 'rgba(40, 20, 5, 0.4)');
-    soilGrad.addColorStop(1, 'rgba(0, 0, 0, 0.85)');
+    soilGrad.addColorStop(0, 'rgba(30, 15, 5, 0.4)');
+    soilGrad.addColorStop(1, 'rgba(0, 0, 0, 0.8)');
     ctx.fillStyle = soilGrad;
     ctx.fillRect(0, groundY, width, height - groundY);
 
@@ -396,19 +388,15 @@ function App() {
 
   const drawSeed = (ctx: CanvasRenderingContext2D, x: number, y: number) => {
     ctx.save();
-    ctx.shadowBlur = 12;
-    ctx.shadowColor = 'rgba(255, 215, 0, 0.6)';
+    ctx.shadowBlur = 15;
+    ctx.shadowColor = 'rgba(255, 215, 0, 0.5)';
     const gradient = ctx.createRadialGradient(x - 2, y - 2, 0, x, y, 7);
     gradient.addColorStop(0, '#FFFACD'); 
-    gradient.addColorStop(0.4, '#FFD700'); 
+    gradient.addColorStop(0.5, '#FFD700'); 
     gradient.addColorStop(1, '#B8860B'); 
     ctx.fillStyle = gradient;
     ctx.beginPath();
-    ctx.ellipse(x, y, 6, 8, Math.sin(Date.now() * 0.01) * 0.2, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
-    ctx.beginPath();
-    ctx.arc(x - 2.5, y - 3, 1.8, 0, Math.PI * 2);
+    ctx.ellipse(x, y, 6, 8, Math.sin(Date.now() * 0.012) * 0.3, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
   };
@@ -424,12 +412,12 @@ function App() {
     const moundHeight = 6 + (f.currentHeight / f.maxHeight) * 4;
     const moundGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, moundWidth);
     moundGrad.addColorStop(0, '#3E2723');
-    moundGrad.addColorStop(0.6, '#4E342E');
     moundGrad.addColorStop(1, 'transparent');
     ctx.fillStyle = moundGrad;
     ctx.beginPath();
     ctx.ellipse(0, 2, moundWidth, moundHeight, 0, 0, Math.PI * 2);
     ctx.fill();
+
     const h = displayHeight;
     ctx.beginPath(); 
     ctx.moveTo(0, 0);
@@ -440,40 +428,33 @@ function App() {
     const tipX = f.stemControlPoints[3].x;
     const tipY = -h;
     ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, tipX, tipY);
-    ctx.lineWidth = 3 + (f.currentHeight / 200);
+    ctx.lineWidth = 3 + (f.currentHeight / 180);
     ctx.strokeStyle = '#2E7D32';
     ctx.lineCap = 'round';
     ctx.stroke();
-    if (h > 60) {
-      const leafCount = Math.floor(h / 90);
+
+    if (h > 50) {
+      const leafCount = Math.floor(h / 80);
       for (let i = 0; i < leafCount; i++) {
-        const baseT = (i + 0.5) / (leafCount + 0.5);
-        const t = Math.min(0.85, Math.max(0.15, baseT + (Math.sin(f.relX * 5 + i) * 0.1)));
+        const t = Math.min(0.85, Math.max(0.15, (i + 0.5) / (leafCount + 0.5)));
         const px = (1-t)**3 * 0 + 3*(1-t)**2*t * cp1x + 3*(1-t)*t**2 * cp2x + t**3 * tipX;
         const py = (1-t)**3 * 0 + 3*(1-t)**2*t * cp1y + 3*(1-t)*t**2 * cp2y + t**3 * tipY;
         const isRight = (i + Math.floor(f.relX * 10)) % 2 === 0;
-        const sway = Math.sin(i * 1.5 + f.relX) * 0.2;
         ctx.save();
         ctx.translate(px, py);
-        const angle = isRight ? (0.7 + sway) : (-0.7 + sway);
-        ctx.rotate(angle);
-        const scale = 0.8 + Math.abs(Math.sin(f.relX * 12 + i) * 0.5);
-        ctx.scale(scale, scale);
+        ctx.rotate(isRight ? 0.7 : -0.7);
         ctx.fillStyle = '#388E3C';
         ctx.beginPath();
-        const xOffset = isRight ? 8 : -8;
-        ctx.ellipse(xOffset, 0, 11, 5, 0, 0, Math.PI * 2);
+        ctx.ellipse(isRight ? 8 : -8, 0, 10, 4, 0, 0, Math.PI * 2);
         ctx.fill();
         ctx.restore();
       }
     }
     if (f.bloomProgress > 0) {
       ctx.translate(tipX, tipY);
-      const baseScale = (f.maxHeight / 250) * growthHeightRef.current;
-      const progressScale = f.bloomProgress;
-      const finalScale = baseScale * progressScale;
-      ctx.scale(Math.max(0.01, finalScale), Math.max(0.01, finalScale));
-      ctx.shadowBlur = 15;
+      const scale = (f.maxHeight / 250) * growthHeightRef.current * f.bloomProgress;
+      ctx.scale(Math.max(0.01, scale), Math.max(0.01, scale));
+      ctx.shadowBlur = 12;
       ctx.shadowColor = f.color;
       renderFlowerHead(ctx, f);
     }
@@ -482,20 +463,6 @@ function App() {
 
   const renderFlowerHead = (ctx: CanvasRenderingContext2D, f: Flower) => {
     const { species, color, secondaryColor } = f;
-    const drawPetal = (w: number, h: number, c: string, stroke: boolean = true) => {
-      ctx.fillStyle = c;
-      ctx.beginPath();
-      ctx.moveTo(0, 0);
-      ctx.bezierCurveTo(-w * 0.8, -h * 0.2, -w, -h * 0.8, 0, -h);
-      ctx.bezierCurveTo(w, -h * 0.8, w * 0.8, -h * 0.2, 0, 0);
-      ctx.fill();
-      if (stroke) {
-        ctx.strokeStyle = 'rgba(255,255,255,0.15)';
-        ctx.lineWidth = 0.8;
-        ctx.stroke();
-      }
-    };
-
     switch (species) {
       case FlowerSpecies.Daisy:
         ctx.fillStyle = '#FFFFFF';
@@ -511,95 +478,45 @@ function App() {
         ctx.fill();
         break;
       case FlowerSpecies.Rose:
-        const roseRotation = f.relX * Math.PI; 
         for (let i = 0; i < 6; i++) {
-          ctx.save();
-          ctx.rotate(roseRotation + (i * Math.PI * 2 / 6));
-          drawPetal(18, 24, color);
-          ctx.restore();
-        }
-        for (let i = 0; i < 5; i++) {
-          ctx.save();
-          ctx.rotate(roseRotation + 0.5 + (i * Math.PI * 2 / 5));
-          drawPetal(14, 20, secondaryColor);
-          ctx.restore();
-        }
-        for (let i = 0; i < 3; i++) {
-          ctx.save();
-          ctx.rotate(roseRotation + 1.2 + (i * Math.PI * 2 / 3));
-          drawPetal(8, 14, color);
+          ctx.save(); ctx.rotate(i * Math.PI * 2 / 6);
+          ctx.fillStyle = color;
+          ctx.beginPath(); ctx.moveTo(0,0); ctx.bezierCurveTo(-15,-10,-15,-30,0,-30); ctx.bezierCurveTo(15,-30,15,-10,0,0); ctx.fill();
           ctx.restore();
         }
         ctx.fillStyle = secondaryColor;
-        ctx.beginPath();
-        ctx.arc(0, -2, 4, 0, Math.PI * 2);
-        ctx.fill();
+        ctx.beginPath(); ctx.arc(0, 0, 8, 0, Math.PI * 2); ctx.fill();
         break;
       case FlowerSpecies.Tulip:
         ctx.fillStyle = color;
-        ctx.beginPath();
-        ctx.ellipse(-8, -10, 14, 22, -0.2, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.beginPath();
-        ctx.ellipse(8, -10, 14, 22, 0.2, 0, Math.PI * 2);
-        ctx.fill();
+        ctx.beginPath(); ctx.ellipse(-7, -12, 12, 22, -0.15, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(7, -12, 12, 22, 0.15, 0, Math.PI * 2); ctx.fill();
         ctx.fillStyle = secondaryColor;
-        ctx.beginPath();
-        ctx.ellipse(0, -12, 12, 24, 0, 0, Math.PI * 2);
-        ctx.fill();
+        ctx.beginPath(); ctx.ellipse(0, -14, 10, 24, 0, 0, Math.PI * 2); ctx.fill();
         break;
       case FlowerSpecies.Lily:
         ctx.fillStyle = color;
         for (let i = 0; i < 6; i++) {
-          ctx.beginPath();
-          ctx.rotate((Math.PI * 2) / 6);
-          ctx.moveTo(0, 0);
-          ctx.quadraticCurveTo(20, -20, 35, 0);
-          ctx.quadraticCurveTo(20, 20, 0, 0);
-          ctx.fill();
+          ctx.beginPath(); ctx.rotate((Math.PI * 2) / 6); ctx.moveTo(0, 0); ctx.quadraticCurveTo(20, -20, 35, 0); ctx.quadraticCurveTo(20, 20, 0, 0); ctx.fill();
         }
         ctx.fillStyle = '#FBC02D';
-        ctx.beginPath();
-        ctx.arc(0, 0, 6, 0, Math.PI * 2);
-        ctx.fill();
+        ctx.beginPath(); ctx.arc(0, 0, 6, 0, Math.PI * 2); ctx.fill();
         break;
       case FlowerSpecies.Poppy:
         ctx.fillStyle = color;
-        for (let i = 0; i < 3; i++) {
-          ctx.save();
-          ctx.rotate((Math.PI * 2 / 3) * i);
-          ctx.beginPath();
-          ctx.moveTo(0, 0);
-          ctx.bezierCurveTo(-25, -20, -20, -35, 0, -35);
-          ctx.bezierCurveTo(20, -35, 25, -20, 0, 0);
-          ctx.fill();
-          ctx.restore();
+        for (let i = 0; i < 4; i++) {
+          ctx.save(); ctx.rotate(i * Math.PI / 2); ctx.beginPath(); ctx.ellipse(15, 0, 18, 14, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
         }
         ctx.fillStyle = '#1a1a1a';
-        ctx.beginPath();
-        ctx.arc(0, 0, 10, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = '#ffffff';
-        for (let j = 0; j < 8; j++) {
-          const angle = (Math.PI * 2 / 8) * j;
-          const dist = 5;
-          ctx.beginPath();
-          ctx.arc(Math.cos(angle) * dist, Math.sin(angle) * dist, 1.5, 0, Math.PI * 2);
-          ctx.fill();
-        }
+        ctx.beginPath(); ctx.arc(0, 0, 8, 0, Math.PI * 2); ctx.fill();
         break;
       default:
         ctx.fillStyle = color;
         for (let i = 0; i < 8; i++) {
-          ctx.beginPath();
-          ctx.rotate((Math.PI * 2) / 8);
-          ctx.ellipse(15, 0, 12, 8, 0, 0, Math.PI * 2);
-          ctx.fill();
+          ctx.beginPath(); ctx.rotate((Math.PI * 2) / 8); ctx.ellipse(15, 0, 12, 8, 0, 0, Math.PI * 2); ctx.fill();
         }
         ctx.fillStyle = secondaryColor;
-        ctx.beginPath();
-        ctx.arc(0, 0, 8, 0, Math.PI * 2);
-        ctx.fill();
+        ctx.beginPath(); ctx.arc(0, 0, 8, 0, Math.PI * 2); ctx.fill();
     }
   };
 
@@ -635,32 +552,17 @@ function App() {
     const canvas = canvasRef.current;
     const video = videoRef.current;
     if (!canvas || !video) return;
-
-    // Create a temporary canvas to combine everything
     const tempCanvas = document.createElement('canvas');
     tempCanvas.width = canvas.width;
     tempCanvas.height = canvas.height;
     const tctx = tempCanvas.getContext('2d');
     if (!tctx) return;
-
     if (bgMode === BackgroundMode.Camera) {
-      // Draw mirrored camera frame
-      tctx.save();
-      tctx.scale(-1, 1);
-      tctx.drawImage(video, -tempCanvas.width, 0, tempCanvas.width, tempCanvas.height);
-      tctx.restore();
+      tctx.save(); tctx.scale(-1, 1); tctx.drawImage(video, -tempCanvas.width, 0, tempCanvas.width, tempCanvas.height); tctx.restore();
     } else {
-      // Draw artistic background
       drawArtisticBackground(tctx, tempCanvas.width, tempCanvas.height, biome);
     }
-
-    // Draw the main overlay canvas (flowers, etc.) on top
-    // Since the main canvas is already mirrored, we need to handle it properly
-    tctx.save();
-    tctx.scale(-1, 1);
-    tctx.drawImage(canvas, -tempCanvas.width, 0, tempCanvas.width, tempCanvas.height);
-    tctx.restore();
-
+    tctx.save(); tctx.scale(-1, 1); tctx.drawImage(canvas, -tempCanvas.width, 0, tempCanvas.width, tempCanvas.height); tctx.restore();
     setCapturedImage(tempCanvas.toDataURL('image/png'));
   }, [bgMode, biome]);
 
@@ -668,23 +570,27 @@ function App() {
     if (!capturedImage) return;
     const link = document.createElement('a');
     link.href = capturedImage;
-    link.download = `my-gemini-garden-${Date.now()}.png`;
+    link.download = `ar-garden-${Date.now()}.png`;
     link.click();
   };
 
   return (
-    <div className="fixed inset-0 bg-black overflow-hidden select-none font-sans text-white">
+    <div 
+      className="fixed inset-0 bg-black overflow-hidden select-none font-sans text-white"
+      onClick={() => setIsMenuOpen(false)}
+    >
       <div className="relative w-full h-full">
         <video 
           ref={videoRef} 
           style={{ transform: `scaleX(-1)`, visibility: bgMode === BackgroundMode.Camera ? 'visible' : 'hidden' }}
-          className="absolute inset-0 w-full h-full object-fill opacity-70" 
+          className="absolute inset-0 w-full h-full object-fill opacity-60" 
           playsInline muted 
         />
         <canvas ref={canvasRef} className="absolute inset-0 w-full h-full transform scale-x-[-1] pointer-events-none" />
 
         <StatusPanel {...uiState} />
         <WorldControls 
+          isOpen={isMenuOpen} setIsOpen={setIsMenuOpen}
           biome={biome} setBiome={setBiomeState}
           onApplyBiomeToAll={handleApplyBiomeToAll}
           species={species} setSpecies={setSpeciesState}
@@ -693,57 +599,45 @@ function App() {
           cameras={cameras} selectedCamera={selectedCamera} setSelectedCamera={setSelectedCamera}
           bgMode={bgMode} setBgMode={setBgMode}
           onCapture={handleCapture}
+          onClearGarden={handleClearGarden}
         />
 
-        <div className="absolute bottom-10 left-1/2 -translate-x-1/2 z-20">
-          <button onClick={handleAnalyze} disabled={isAnalyzing}
-            className="group flex items-center gap-4 bg-white/10 hover:bg-white/20 backdrop-blur-xl border border-white/20 text-white px-8 py-4 rounded-full font-bold shadow-2xl transition-all active:scale-95 disabled:opacity-50">
+        <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-20 w-full px-6 max-w-sm">
+          <button onClick={(e) => { e.stopPropagation(); handleAnalyze(); }} disabled={isAnalyzing}
+            className="w-full group flex items-center justify-center gap-4 bg-white/10 hover:bg-white/20 backdrop-blur-2xl border border-white/20 text-white py-4 rounded-2xl font-bold shadow-2xl transition-all active:scale-95 disabled:opacity-50">
             <MdAutoAwesome className={`text-xl text-pink-400 ${isAnalyzing ? "animate-spin" : "group-hover:rotate-12"}`} />
-            <span className="tracking-[0.2em] text-[10px] uppercase">{isAnalyzing ? "CONSULTING GARDEN SPIRITS..." : "AI GARDEN ANALYSIS"}</span>
+            <span className="tracking-[0.2em] text-[10px] uppercase font-black">{isAnalyzing ? "CONSULTING SPIRITS..." : "AI GARDEN ANALYSIS"}</span>
           </button>
         </div>
 
-        {/* Gemini Analysis Modal */}
         {analysisResult && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/70 backdrop-blur-md z-30 p-6">
-             <div className="bg-[#0f0f0f] p-10 rounded-3xl max-w-xl text-center border border-white/10 shadow-2xl relative">
-                <div className="absolute top-0 left-1/2 -translate-x-1/2 w-20 h-1 bg-pink-500 rounded-b-lg"></div>
-                <p className="text-white text-xl font-light leading-relaxed mb-8 italic">"{analysisResult}"</p>
-                <button onClick={() => setAnalysisResult(null)} className="px-10 py-3 bg-white text-black rounded-full font-bold text-[10px] tracking-widest uppercase hover:bg-gray-200 transition-colors">BACK TO GARDEN</button>
+          <div className="absolute inset-0 flex items-center justify-center bg-black/80 backdrop-blur-md z-40 p-6" onClick={(e) => e.stopPropagation()}>
+             <div className="bg-[#0f0f0f] p-8 sm:p-12 rounded-[2rem] max-w-xl text-center border border-white/10 shadow-2xl relative overflow-hidden">
+                <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-pink-500 via-purple-500 to-pink-500"></div>
+                <p className="text-white text-xl sm:text-2xl font-light leading-relaxed mb-10 italic">"{analysisResult}"</p>
+                <button onClick={() => setAnalysisResult(null)} className="px-12 py-4 bg-white text-black rounded-2xl font-black text-[10px] tracking-widest uppercase hover:bg-pink-500 hover:text-white transition-all">CLOSE VISION</button>
              </div>
           </div>
         )}
 
-        {/* Screenshot Modal */}
         {capturedImage && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/90 backdrop-blur-xl z-40 p-4">
-             <div className="bg-white/5 p-4 rounded-3xl max-w-2xl w-full border border-white/10 shadow-2xl flex flex-col items-center">
-                <div className="flex justify-between w-full mb-4 px-2">
-                   <h3 className="text-[10px] font-black tracking-[0.2em] text-pink-400 uppercase">GARDEN CAPTURED</h3>
+          <div className="absolute inset-0 flex items-center justify-center bg-black/95 backdrop-blur-2xl z-50 p-4" onClick={(e) => e.stopPropagation()}>
+             <div className="bg-white/5 p-4 rounded-[2.5rem] max-w-2xl w-full border border-white/10 shadow-2xl flex flex-col items-center">
+                <div className="flex justify-between w-full mb-4 px-4">
+                   <h3 className="text-[10px] font-black tracking-[0.3em] text-pink-400 uppercase">MEMORY CAPTURED</h3>
                    <button onClick={() => setCapturedImage(null)} className="text-white hover:text-pink-400 transition-colors">
-                      <MdClose className="text-xl" />
+                      <MdClose className="text-2xl" />
                    </button>
                 </div>
-                
-                <div className="relative w-full rounded-2xl overflow-hidden border border-white/10 mb-6 bg-black">
+                <div className="relative w-full rounded-[2rem] overflow-hidden border border-white/10 mb-6 bg-black">
                    <img src={capturedImage} alt="Captured Garden" className="w-full h-auto block" />
-                   <div className="absolute inset-0 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity bg-black/40 pointer-events-none">
-                      <p className="text-[10px] font-bold tracking-widest text-white uppercase">Long press to save on mobile</p>
-                   </div>
                 </div>
-
                 <div className="flex gap-4 w-full">
-                  <button 
-                    onClick={downloadCapturedImage} 
-                    className="flex-1 flex items-center justify-center gap-3 py-4 bg-white text-black rounded-xl font-bold text-[10px] tracking-widest uppercase hover:bg-pink-400 hover:text-white transition-all active:scale-95"
-                  >
-                    <MdDownload className="text-lg" /> DOWNLOAD IMAGE
+                  <button onClick={downloadCapturedImage} className="flex-1 flex items-center justify-center gap-3 py-5 bg-white text-black rounded-2xl font-black text-[10px] tracking-widest uppercase hover:bg-pink-500 hover:text-white transition-all">
+                    <MdDownload className="text-xl" /> DOWNLOAD
                   </button>
-                  <button 
-                    onClick={() => setCapturedImage(null)} 
-                    className="px-6 py-4 bg-white/5 text-white border border-white/10 rounded-xl font-bold text-[10px] tracking-widest uppercase hover:bg-white/10 transition-all"
-                  >
-                    DISCARD
+                  <button onClick={() => setCapturedImage(null)} className="px-8 py-5 bg-white/5 text-white border border-white/10 rounded-2xl font-black text-[10px] tracking-widest uppercase hover:bg-white/10 transition-all">
+                    EXIT
                   </button>
                 </div>
              </div>
@@ -753,7 +647,7 @@ function App() {
         {!loaded && (
            <div className="absolute inset-0 bg-black flex flex-col items-center justify-center text-white z-50">
              <div className="w-16 h-16 border-2 border-white/5 border-t-pink-500 rounded-full animate-spin mb-6"></div>
-             <p className="tracking-[0.6em] text-[10px] font-black text-white/40 uppercase">Awakening Nature</p>
+             <p className="tracking-[0.8em] text-[10px] font-black text-white/40 uppercase">Awakening Nature</p>
            </div>
         )}
       </div>
