@@ -465,17 +465,37 @@ function App() {
     const { species, color, secondaryColor } = f;
     switch (species) {
       case FlowerSpecies.Daisy:
+        // Refined Daisy Petals to match reference image (High density, long white petals)
         ctx.fillStyle = '#FFFFFF';
-        for (let i = 0; i < 12; i++) {
+        const daisyPetalCount = 20;
+        for (let i = 0; i < daisyPetalCount; i++) {
           ctx.beginPath();
-          ctx.rotate((Math.PI * 2) / 12);
-          ctx.ellipse(18, 0, 15, 5, 0, 0, Math.PI * 2);
+          ctx.rotate((Math.PI * 2) / daisyPetalCount);
+          // Longer, thinner petals as seen in the image
+          ctx.ellipse(18, 0, 16, 4.5, 0, 0, Math.PI * 2);
           ctx.fill();
         }
-        ctx.fillStyle = '#FFD600';
+        
+        // Refined Center (Large yellow disk with subtle green core)
+        // Outer glow/transition
+        ctx.fillStyle = '#FFEB3B';
         ctx.beginPath();
         ctx.arc(0, 0, 10, 0, Math.PI * 2);
         ctx.fill();
+        
+        // Inner detail to match the "glowing" look in the reference
+        ctx.fillStyle = '#00E676'; // Neon green core
+        ctx.beginPath();
+        ctx.arc(0, 0, 4, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Final bright yellow overlay
+        ctx.fillStyle = '#FFEE58';
+        ctx.globalAlpha = 0.6;
+        ctx.beginPath();
+        ctx.arc(0, 0, 7, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1.0;
         break;
       case FlowerSpecies.Rose:
         for (let i = 0; i < 6; i++) {
