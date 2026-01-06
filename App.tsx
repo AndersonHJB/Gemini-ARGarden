@@ -135,15 +135,10 @@ function App() {
   };
 
   const createFlower = (relX: number, theme: BiomeTheme, spec: FlowerSpecies): Flower => {
-    let colorPool: string[];
-    if (spec === FlowerSpecies.Random) {
-      colorPool = Object.values(BIOME_COLORS).flat();
-    } else {
-      colorPool = BIOME_COLORS[theme];
-    }
-
+    let colorPool = BIOME_COLORS[theme];
     const color = colorPool[Math.floor(Math.random() * colorPool.length)];
-    const secondaryColor = colorPool[Math.floor(Math.random() * colorPool.length)];
+    // Ensure secondary color is different if possible
+    let secondaryColor = colorPool[(colorPool.indexOf(color) + 1) % colorPool.length];
     
     const speciesOptions = Object.values(FlowerSpecies).filter(s => s !== FlowerSpecies.Random);
     const chosenSpecies = spec === FlowerSpecies.Random 
@@ -331,7 +326,7 @@ function App() {
         if (f.currentHeight > f.maxHeight) f.currentHeight = f.maxHeight;
       } 
       if (f.currentHeight > f.maxHeight * 0.3 && f.bloomProgress < 1) {
-        f.bloomProgress += (mouthOpen ? 0.09 : 0) * dt;
+        f.bloomProgress += (mouthOpen ? 0.09 : 0.01) * dt;
       }
     });
 
@@ -411,7 +406,7 @@ function App() {
     const moundWidth = 24 + (f.currentHeight / f.maxHeight) * 12;
     const moundHeight = 6 + (f.currentHeight / f.maxHeight) * 4;
     const moundGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, moundWidth);
-    moundGrad.addColorStop(0, '#3E2723');
+    moundGrad.addColorStop(0, 'rgba(62, 39, 35, 0.8)');
     moundGrad.addColorStop(1, 'transparent');
     ctx.fillStyle = moundGrad;
     ctx.beginPath();
@@ -428,11 +423,12 @@ function App() {
     const tipX = f.stemControlPoints[3].x;
     const tipY = -h;
     ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, tipX, tipY);
-    ctx.lineWidth = 3 + (f.currentHeight / 180);
+    ctx.lineWidth = 4 + (f.currentHeight / 180);
     ctx.strokeStyle = '#2E7D32';
     ctx.lineCap = 'round';
     ctx.stroke();
 
+    // Leaves
     if (h > 50) {
       const leafCount = Math.floor(h / 80);
       for (let i = 0; i < leafCount; i++) {
@@ -445,17 +441,25 @@ function App() {
         ctx.rotate(isRight ? 0.7 : -0.7);
         ctx.fillStyle = '#388E3C';
         ctx.beginPath();
-        ctx.ellipse(isRight ? 8 : -8, 0, 10, 4, 0, 0, Math.PI * 2);
+        // 3D Flat Leaf: Two halves
+        ctx.ellipse(isRight ? 8 : -8, 0, 12, 5, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 0.3;
+        ctx.fillStyle = '#1B5E20';
+        ctx.beginPath();
+        ctx.ellipse(isRight ? 8 : -8, 0, 12, 2, 0, 0, Math.PI * 2);
         ctx.fill();
         ctx.restore();
       }
     }
+    
+    // Bloom
     if (f.bloomProgress > 0) {
       ctx.translate(tipX, tipY);
-      const scale = (f.maxHeight / 250) * growthHeightRef.current * f.bloomProgress;
+      const scale = (f.maxHeight / 220) * growthHeightRef.current * Math.min(1.0, f.bloomProgress);
       ctx.scale(Math.max(0.01, scale), Math.max(0.01, scale));
-      ctx.shadowBlur = 12;
-      ctx.shadowColor = f.color;
+      ctx.shadowBlur = 15;
+      ctx.shadowColor = 'rgba(0,0,0,0.2)';
       renderFlowerHead(ctx, f);
     }
     ctx.restore();
@@ -463,80 +467,166 @@ function App() {
 
   const renderFlowerHead = (ctx: CanvasRenderingContext2D, f: Flower) => {
     const { species, color, secondaryColor } = f;
+    const p = Math.min(1, f.bloomProgress);
+
     switch (species) {
       case FlowerSpecies.Daisy:
-        // Refined Daisy Petals to match reference image (High density, long white petals)
-        ctx.fillStyle = '#FFFFFF';
-        const daisyPetalCount = 20;
-        for (let i = 0; i < daisyPetalCount; i++) {
+        // 3D Flat Daisy: Layered needle petals
+        ctx.save();
+        const petalCount = 24;
+        // Outer Shadow layer
+        ctx.fillStyle = 'rgba(0,0,0,0.1)';
+        for (let i = 0; i < petalCount; i++) {
+          ctx.rotate((Math.PI * 2) / petalCount);
           ctx.beginPath();
-          ctx.rotate((Math.PI * 2) / daisyPetalCount);
-          // Longer, thinner petals as seen in the image
-          ctx.ellipse(18, 0, 16, 4.5, 0, 0, Math.PI * 2);
+          ctx.ellipse(22, 1, 18, 3, 0, 0, Math.PI * 2);
           ctx.fill();
         }
-        
-        // Refined Center (Large yellow disk with subtle green core)
-        // Outer glow/transition
-        ctx.fillStyle = '#FFEB3B';
-        ctx.beginPath();
-        ctx.arc(0, 0, 10, 0, Math.PI * 2);
-        ctx.fill();
-        
-        // Inner detail to match the "glowing" look in the reference
-        ctx.fillStyle = '#00E676'; // Neon green core
-        ctx.beginPath();
-        ctx.arc(0, 0, 4, 0, Math.PI * 2);
-        ctx.fill();
-        
-        // Final bright yellow overlay
-        ctx.fillStyle = '#FFEE58';
-        ctx.globalAlpha = 0.6;
-        ctx.beginPath();
-        ctx.arc(0, 0, 7, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.globalAlpha = 1.0;
+        // Main petals
+        ctx.fillStyle = '#FFFFFF';
+        for (let i = 0; i < petalCount; i++) {
+          ctx.rotate((Math.PI * 2) / petalCount);
+          ctx.beginPath();
+          ctx.ellipse(20, 0, 18, 3.5, 0, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        // Center 3D Flat
+        const centerGrad = ctx.createRadialGradient(-3, -3, 0, 0, 0, 12);
+        centerGrad.addColorStop(0, '#FFF176');
+        centerGrad.addColorStop(0.7, '#FBC02D');
+        centerGrad.addColorStop(1, '#F57F17');
+        ctx.fillStyle = centerGrad;
+        ctx.beginPath(); ctx.arc(0, 0, 11, 0, Math.PI * 2); ctx.fill();
+        // Neon highlights on center
+        ctx.strokeStyle = '#FFEE58';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([2, 2]);
+        ctx.beginPath(); ctx.arc(0, 0, 7, 0, Math.PI * 2); ctx.stroke();
+        ctx.restore();
         break;
+
       case FlowerSpecies.Rose:
-        for (let i = 0; i < 6; i++) {
-          ctx.save(); ctx.rotate(i * Math.PI * 2 / 6);
-          ctx.fillStyle = color;
-          ctx.beginPath(); ctx.moveTo(0,0); ctx.bezierCurveTo(-15,-10,-15,-30,0,-30); ctx.bezierCurveTo(15,-30,15,-10,0,0); ctx.fill();
+        // 3D Flat Rose: Layered geometric spiraling petals
+        const roseLayers = 3;
+        for (let l = 0; l < roseLayers; l++) {
+          const count = 5 + l;
+          const radius = 25 - l * 7;
+          const layerColor = l % 2 === 0 ? color : secondaryColor;
+          ctx.save();
+          ctx.rotate(l * 0.5);
+          for (let i = 0; i < count; i++) {
+            ctx.rotate((Math.PI * 2) / count);
+            ctx.fillStyle = layerColor;
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.quadraticCurveTo(radius, -radius, radius * 1.5, 0);
+            ctx.quadraticCurveTo(radius, radius, 0, 0);
+            ctx.fill();
+            // Edge highlight
+            ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+          }
           ctx.restore();
         }
+        // Core
         ctx.fillStyle = secondaryColor;
-        ctx.beginPath(); ctx.arc(0, 0, 8, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(0, 0, 5, 0, Math.PI * 2); ctx.fill();
         break;
+
       case FlowerSpecies.Tulip:
-        ctx.fillStyle = color;
-        ctx.beginPath(); ctx.ellipse(-7, -12, 12, 22, -0.15, 0, Math.PI * 2); ctx.fill();
-        ctx.beginPath(); ctx.ellipse(7, -12, 12, 22, 0.15, 0, Math.PI * 2); ctx.fill();
+        // 3D Flat Tulip: Three overlapping vertical petals
+        // Back petal (darker/accent)
         ctx.fillStyle = secondaryColor;
-        ctx.beginPath(); ctx.ellipse(0, -14, 10, 24, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath();
+        ctx.ellipse(0, -18, 12, 28, 0, 0, Math.PI * 2);
+        ctx.fill();
+        // Side petals (main color)
+        ctx.fillStyle = color;
+        ctx.save();
+        ctx.rotate(-0.2);
+        ctx.beginPath(); ctx.ellipse(-8, -15, 12, 24, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+        ctx.save();
+        ctx.rotate(0.2);
+        ctx.beginPath(); ctx.ellipse(8, -15, 12, 24, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+        // Light highlight on one side
+        ctx.fillStyle = 'rgba(255,255,255,0.15)';
+        ctx.beginPath(); ctx.ellipse(-10, -15, 4, 15, 0.1, 0, Math.PI * 2); ctx.fill();
         break;
+
       case FlowerSpecies.Lily:
-        ctx.fillStyle = color;
-        for (let i = 0; i < 6; i++) {
-          ctx.beginPath(); ctx.rotate((Math.PI * 2) / 6); ctx.moveTo(0, 0); ctx.quadraticCurveTo(20, -20, 35, 0); ctx.quadraticCurveTo(20, 20, 0, 0); ctx.fill();
+        // 3D Flat Lily: Star-shaped elongated petals with depth shadows
+        const lilyCount = 6;
+        // Depth layer
+        ctx.fillStyle = 'rgba(0,0,0,0.15)';
+        for (let i = 0; i < lilyCount; i++) {
+          ctx.rotate((Math.PI * 2) / lilyCount);
+          ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(38, -2); ctx.lineTo(42, 2); ctx.fill();
         }
+        // Main petals
+        ctx.fillStyle = color;
+        for (let i = 0; i < lilyCount; i++) {
+          ctx.rotate((Math.PI * 2) / lilyCount);
+          ctx.beginPath();
+          ctx.moveTo(0, 0);
+          ctx.quadraticCurveTo(20, -12, 40, 0);
+          ctx.quadraticCurveTo(20, 12, 0, 0);
+          ctx.fill();
+          // Stripe detail
+          ctx.fillStyle = secondaryColor;
+          ctx.globalAlpha = 0.4;
+          ctx.beginPath(); ctx.ellipse(15, 0, 10, 1.5, 0, 0, Math.PI * 2); ctx.fill();
+          ctx.globalAlpha = 1.0;
+          ctx.fillStyle = color;
+        }
+        // Pistils
         ctx.fillStyle = '#FBC02D';
-        ctx.beginPath(); ctx.arc(0, 0, 6, 0, Math.PI * 2); ctx.fill();
+        for (let i = 0; i < 3; i++) {
+          ctx.rotate(1);
+          ctx.beginPath(); ctx.rect(0, -1, 15, 2); ctx.fill();
+          ctx.beginPath(); ctx.arc(15, 0, 2.5, 0, Math.PI * 2); ctx.fill();
+        }
         break;
+
       case FlowerSpecies.Poppy:
-        ctx.fillStyle = color;
-        for (let i = 0; i < 4; i++) {
-          ctx.save(); ctx.rotate(i * Math.PI / 2); ctx.beginPath(); ctx.ellipse(15, 0, 18, 14, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+        // 3D Flat Poppy: Broad overlapping floppy petals
+        ctx.save();
+        const poppyPetals = 4;
+        for (let i = 0; i < poppyPetals; i++) {
+          ctx.rotate((Math.PI * 2) / poppyPetals);
+          // Petal Shadow
+          ctx.fillStyle = 'rgba(0,0,0,0.1)';
+          ctx.beginPath(); ctx.ellipse(18, 2, 22, 16, 0.1, 0, Math.PI * 2); ctx.fill();
+          // Main Petal
+          ctx.fillStyle = color;
+          ctx.beginPath(); ctx.ellipse(18, 0, 22, 16, 0, 0, Math.PI * 2); ctx.fill();
+          // Inner detail
+          ctx.fillStyle = secondaryColor;
+          ctx.globalAlpha = 0.2;
+          ctx.beginPath(); ctx.arc(5, 0, 8, 0, Math.PI * 2); ctx.fill();
+          ctx.globalAlpha = 1.0;
         }
-        ctx.fillStyle = '#1a1a1a';
-        ctx.beginPath(); ctx.arc(0, 0, 8, 0, Math.PI * 2); ctx.fill();
+        // Seed head (3D Flat)
+        ctx.fillStyle = '#1A1A1A';
+        ctx.beginPath(); ctx.arc(0, 0, 9, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#2E7D32';
+        ctx.beginPath(); ctx.arc(0, 0, 4, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
         break;
+
       default:
-        ctx.fillStyle = color;
+        // Random / Generic Star Flower
         for (let i = 0; i < 8; i++) {
-          ctx.beginPath(); ctx.rotate((Math.PI * 2) / 8); ctx.ellipse(15, 0, 12, 8, 0, 0, Math.PI * 2); ctx.fill();
+          ctx.rotate((Math.PI * 2) / 8);
+          ctx.fillStyle = color;
+          ctx.beginPath(); ctx.ellipse(16, 0, 14, 6, 0, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = secondaryColor;
+          ctx.beginPath(); ctx.ellipse(10, 0, 6, 2, 0, 0, Math.PI * 2); ctx.fill();
         }
-        ctx.fillStyle = secondaryColor;
-        ctx.beginPath(); ctx.arc(0, 0, 8, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#FFFFFF';
+        ctx.beginPath(); ctx.arc(0, 0, 5, 0, Math.PI * 2); ctx.fill();
     }
   };
 
@@ -557,7 +647,7 @@ function App() {
     flowersRef.current = flowersRef.current.map(f => ({
       ...f,
       color: colorPool[Math.floor(Math.random() * colorPool.length)],
-      secondaryColor: colorPool[Math.floor(Math.random() * colorPool.length)]
+      secondaryColor: colorPool[(colorPool.indexOf(f.color) + 1) % colorPool.length]
     }));
   }, []);
 
