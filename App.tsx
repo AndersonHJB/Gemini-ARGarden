@@ -655,7 +655,9 @@ function App() {
   const handleAnalyze = useCallback(async () => {
     if (!canvasRef.current) return;
     setIsAnalyzing(true);
-    setAnalysisResult(await analyzeGarden(canvasRef.current.toDataURL('image/png'), flowersRef.current.length));
+    // Now uses local random list instead of Gemini API
+    const result = await analyzeGarden(canvasRef.current.toDataURL('image/png'), flowersRef.current.length);
+    setAnalysisResult(result);
     setIsAnalyzing(false);
   }, []);
 
@@ -713,11 +715,12 @@ function App() {
           onClearGarden={handleClearGarden}
         />
 
-        <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-20 w-full px-6 max-w-sm">
+        {/* Moved Button to Bottom Right as requested */}
+        <div className="absolute bottom-8 right-8 z-20 w-72">
           <button onClick={(e) => { e.stopPropagation(); handleAnalyze(); }} disabled={isAnalyzing}
             className="w-full group flex items-center justify-center gap-4 bg-white/10 hover:bg-white/20 backdrop-blur-2xl border border-white/20 text-white py-4 rounded-2xl font-bold shadow-2xl transition-all active:scale-95 disabled:opacity-50">
             <MdAutoAwesome className={`text-xl text-pink-400 ${isAnalyzing ? "animate-spin" : "group-hover:rotate-12"}`} />
-            <span className="tracking-[0.2em] text-[10px] uppercase font-black">{isAnalyzing ? "CONSULTING SPIRITS..." : "AI GARDEN ANALYSIS"}</span>
+            <span className="tracking-[0.2em] text-[10px] uppercase font-black">{isAnalyzing ? "CONSULTING SPIRITS..." : "GARDEN REFLECTIONS"}</span>
           </button>
         </div>
 
