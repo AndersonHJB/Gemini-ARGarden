@@ -41,6 +41,7 @@ function App() {
   const bgModeRef = useRef<BackgroundMode>(BackgroundMode.Camera);
 
   const [loaded, setLoaded] = useState(false);
+  const [lang, setLang] = useState<'CN' | 'EN'>('CN');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [cameras, setCameras] = useState<MediaDeviceInfo[]>([]);
   const [selectedCamera, setSelectedCamera] = useState<string>('');
@@ -655,11 +656,10 @@ function App() {
   const handleAnalyze = useCallback(async () => {
     if (!canvasRef.current) return;
     setIsAnalyzing(true);
-    // Now uses local random list instead of Gemini API
-    const result = await analyzeGarden(canvasRef.current.toDataURL('image/png'), flowersRef.current.length);
+    const result = await analyzeGarden(canvasRef.current.toDataURL('image/png'), flowersRef.current.length, lang);
     setAnalysisResult(result);
     setIsAnalyzing(false);
-  }, []);
+  }, [lang]);
 
   const handleCapture = useCallback(() => {
     const canvas = canvasRef.current;
@@ -687,6 +687,13 @@ function App() {
     link.click();
   };
 
+  const reflectionsBtnText = lang === 'CN' ? "花园感悟" : "GARDEN REFLECTIONS";
+  const reflectionsLoadingText = lang === 'CN' ? "正在感悟生命..." : "CONSULTING SPIRITS...";
+  const reflectionsCloseText = lang === 'CN' ? "关闭感悟" : "CLOSE VISION";
+  const capturedMemoryText = lang === 'CN' ? "记忆已定格" : "MEMORY CAPTURED";
+  const downloadBtnText = lang === 'CN' ? "下载图片" : "DOWNLOAD";
+  const exitBtnText = lang === 'CN' ? "返回" : "EXIT";
+
   return (
     <div 
       className="fixed inset-0 bg-black overflow-hidden select-none font-sans text-white"
@@ -701,7 +708,7 @@ function App() {
         />
         <canvas ref={canvasRef} className="absolute inset-0 w-full h-full transform scale-x-[-1] pointer-events-none" />
 
-        <StatusPanel {...uiState} />
+        <StatusPanel {...uiState} lang={lang} />
         <WorldControls 
           isOpen={isMenuOpen} setIsOpen={setIsMenuOpen}
           biome={biome} setBiome={setBiomeState}
@@ -713,14 +720,14 @@ function App() {
           bgMode={bgMode} setBgMode={setBgMode}
           onCapture={handleCapture}
           onClearGarden={handleClearGarden}
+          lang={lang} setLang={setLang}
         />
 
-        {/* Moved Button to Bottom Right as requested */}
         <div className="absolute bottom-8 right-8 z-20 w-72">
           <button onClick={(e) => { e.stopPropagation(); handleAnalyze(); }} disabled={isAnalyzing}
             className="w-full group flex items-center justify-center gap-4 bg-white/10 hover:bg-white/20 backdrop-blur-2xl border border-white/20 text-white py-4 rounded-2xl font-bold shadow-2xl transition-all active:scale-95 disabled:opacity-50">
             <MdAutoAwesome className={`text-xl text-pink-400 ${isAnalyzing ? "animate-spin" : "group-hover:rotate-12"}`} />
-            <span className="tracking-[0.2em] text-[10px] uppercase font-black">{isAnalyzing ? "CONSULTING SPIRITS..." : "GARDEN REFLECTIONS"}</span>
+            <span className="tracking-[0.2em] text-[10px] uppercase font-black">{isAnalyzing ? reflectionsLoadingText : reflectionsBtnText}</span>
           </button>
         </div>
 
@@ -729,7 +736,7 @@ function App() {
              <div className="bg-[#0f0f0f] p-8 sm:p-12 rounded-[2rem] max-w-xl text-center border border-white/10 shadow-2xl relative overflow-hidden">
                 <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-pink-500 via-purple-500 to-pink-500"></div>
                 <p className="text-white text-xl sm:text-2xl font-light leading-relaxed mb-10 italic">"{analysisResult}"</p>
-                <button onClick={() => setAnalysisResult(null)} className="px-12 py-4 bg-white text-black rounded-2xl font-black text-[10px] tracking-widest uppercase hover:bg-pink-500 hover:text-white transition-all">CLOSE VISION</button>
+                <button onClick={() => setAnalysisResult(null)} className="px-12 py-4 bg-white text-black rounded-2xl font-black text-[10px] tracking-widest uppercase hover:bg-pink-500 hover:text-white transition-all">{reflectionsCloseText}</button>
              </div>
           </div>
         )}
@@ -738,7 +745,7 @@ function App() {
           <div className="absolute inset-0 flex items-center justify-center bg-black/95 backdrop-blur-2xl z-50 p-4" onClick={(e) => e.stopPropagation()}>
              <div className="bg-white/5 p-4 rounded-[2.5rem] max-w-2xl w-full border border-white/10 shadow-2xl flex flex-col items-center">
                 <div className="flex justify-between w-full mb-4 px-4">
-                   <h3 className="text-[10px] font-black tracking-[0.3em] text-pink-400 uppercase">MEMORY CAPTURED</h3>
+                   <h3 className="text-[10px] font-black tracking-[0.3em] text-pink-400 uppercase">{capturedMemoryText}</h3>
                    <button onClick={() => setCapturedImage(null)} className="text-white hover:text-pink-400 transition-colors">
                       <MdClose className="text-2xl" />
                    </button>
@@ -748,10 +755,10 @@ function App() {
                 </div>
                 <div className="flex gap-4 w-full">
                   <button onClick={downloadCapturedImage} className="flex-1 flex items-center justify-center gap-3 py-5 bg-white text-black rounded-2xl font-black text-[10px] tracking-widest uppercase hover:bg-pink-500 hover:text-white transition-all">
-                    <MdDownload className="text-xl" /> DOWNLOAD
+                    <MdDownload className="text-xl" /> {downloadBtnText}
                   </button>
                   <button onClick={() => setCapturedImage(null)} className="px-8 py-5 bg-white/5 text-white border border-white/10 rounded-2xl font-black text-[10px] tracking-widest uppercase hover:bg-white/10 transition-all">
-                    EXIT
+                    {exitBtnText}
                   </button>
                 </div>
              </div>
@@ -761,7 +768,7 @@ function App() {
         {!loaded && (
            <div className="absolute inset-0 bg-black flex flex-col items-center justify-center text-white z-50">
              <div className="w-16 h-16 border-2 border-white/5 border-t-pink-500 rounded-full animate-spin mb-6"></div>
-             <p className="tracking-[0.8em] text-[10px] font-black text-white/40 uppercase">Awakening Nature</p>
+             <p className="tracking-[0.8em] text-[10px] font-black text-white/40 uppercase">{lang === 'CN' ? '唤醒自然中' : 'Awakening Nature'}</p>
            </div>
         )}
       </div>

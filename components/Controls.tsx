@@ -2,13 +2,14 @@
 import React from 'react';
 import { BiomeTheme, BIOME_COLORS, FlowerSpecies, BackgroundMode } from '../types';
 import { twMerge } from 'tailwind-merge';
-import { MdCameraAlt, MdBrush, MdVideocam, MdSettings, MdClose, MdDeleteSweep } from "react-icons/md";
+import { MdCameraAlt, MdBrush, MdVideocam, MdSettings, MdClose, MdDeleteSweep, MdLanguage } from "react-icons/md";
 
 interface StatusPanelProps {
   isPinching: boolean;
   isMouthOpen: boolean;
   isFist: boolean;
   fistTimeRemaining: number;
+  lang: 'CN' | 'EN';
 }
 
 interface WorldControlsProps {
@@ -29,9 +30,51 @@ interface WorldControlsProps {
   setBgMode: (m: BackgroundMode) => void;
   onCapture: () => void;
   onClearGarden: () => void;
+  lang: 'CN' | 'EN';
+  setLang: (l: 'CN' | 'EN') => void;
 }
 
-export const StatusPanel: React.FC<StatusPanelProps> = ({ isPinching, isMouthOpen, isFist, fistTimeRemaining }) => {
+const UI_STRINGS = {
+  CN: {
+    PINCH: "捏合：播种",
+    MOUTH: "张嘴：生长",
+    CLEARING: "正在清理...",
+    SETTINGS: "花园设置",
+    CAPTURE: "拍摄",
+    CLEAR: "清除",
+    GROWTH_SCALE: "世界生长比例",
+    PERSPECTIVE: "视角",
+    AR_VIEW: "增强现实",
+    ARTISTIC: "艺术视图",
+    BIOME_DNA: "环境基因",
+    MUTATE: "变异全部",
+    SPECIES: "花卉品种",
+    CONVERT: "转换全部",
+    HARDWARE: "硬件输出",
+    LANGUAGE: "语言 (Language)"
+  },
+  EN: {
+    PINCH: "PINCH: PLANT",
+    MOUTH: "MOUTH: GROW",
+    CLEARING: "CLEARING...",
+    SETTINGS: "GARDEN SETTINGS",
+    CAPTURE: "CAPTURE",
+    CLEAR: "CLEAR",
+    GROWTH_SCALE: "World Growth Scale",
+    PERSPECTIVE: "Perspective",
+    AR_VIEW: "AR VIEW",
+    ARTISTIC: "ARTISTIC",
+    BIOME_DNA: "Biome DNA",
+    MUTATE: "MUTATE ALL",
+    SPECIES: "Flower Species",
+    CONVERT: "CONVERT ALL",
+    HARDWARE: "Hardware Output",
+    LANGUAGE: "Language (语言)"
+  }
+};
+
+export const StatusPanel: React.FC<StatusPanelProps> = ({ isPinching, isMouthOpen, isFist, fistTimeRemaining, lang }) => {
+  const t = UI_STRINGS[lang];
   const itemClass = (active: boolean, isClear: boolean = false) => 
     twMerge(
       "flex items-center gap-3 px-4 py-2 rounded-lg text-[10px] font-bold tracking-widest transition-all duration-300 border min-w-[160px] sm:min-w-[180px]",
@@ -52,16 +95,16 @@ export const StatusPanel: React.FC<StatusPanelProps> = ({ isPinching, isMouthOpe
     <div className="absolute top-4 sm:top-6 left-4 sm:left-6 flex flex-col gap-2 z-20 font-mono pointer-events-none">
       <div className={itemClass(isPinching)}>
         <div className={indicatorClass(isPinching)} />
-        PINCH: PLANT
+        {t.PINCH}
       </div>
       <div className={itemClass(isMouthOpen)}>
         <div className={indicatorClass(isMouthOpen)} />
-        MOUTH: GROW
+        {t.MOUTH}
       </div>
       {isFist && (
         <div className={itemClass(isFist, true)}>
           <div className={indicatorClass(isFist)} />
-          <div className="flex-1">CLEARING...</div>
+          <div className="flex-1">{t.CLEARING}</div>
           <span className="text-[12px] font-black tabular-nums">
             {fistTimeRemaining.toFixed(1)}s
           </span>
@@ -90,11 +133,11 @@ const ControlSlider = ({ label, value, min, max, step, onChange, unit = "" }: an
 export const WorldControls: React.FC<WorldControlsProps> = ({
   isOpen, setIsOpen, biome, setBiome, onApplyBiomeToAll, species, setSpecies, onApplySpeciesToAll, 
   growthHeight, setGrowthHeight, cameras, selectedCamera, setSelectedCamera, bgMode, setBgMode, 
-  onCapture, onClearGarden
+  onCapture, onClearGarden, lang, setLang
 }) => {
+  const t = UI_STRINGS[lang];
   return (
     <>
-      {/* Menu Toggle Button */}
       {!isOpen && (
         <button 
           onClick={(e) => { e.stopPropagation(); setIsOpen(true); }}
@@ -104,7 +147,6 @@ export const WorldControls: React.FC<WorldControlsProps> = ({
         </button>
       )}
 
-      {/* Main Panel */}
       <div 
         onClick={(e) => e.stopPropagation()}
         className={twMerge(
@@ -115,7 +157,7 @@ export const WorldControls: React.FC<WorldControlsProps> = ({
         <div className="flex justify-between items-center mb-6 border-b border-white/10 pb-4">
           <div className="flex items-center gap-3">
              <div className="w-2 h-2 rounded-full bg-pink-500 animate-pulse" />
-             <h2 className="text-[10px] font-black tracking-[0.2em] text-gray-300">GARDEN SETTINGS</h2>
+             <h2 className="text-[10px] font-black tracking-[0.2em] text-gray-300">{t.SETTINGS}</h2>
           </div>
           <button 
             onClick={() => setIsOpen(false)}
@@ -130,20 +172,44 @@ export const WorldControls: React.FC<WorldControlsProps> = ({
             onClick={onCapture}
             className="flex-1 flex items-center justify-center gap-2 py-3 bg-pink-500 hover:bg-pink-600 rounded-xl transition-all font-bold text-[9px] tracking-widest uppercase shadow-[0_0_15px_rgba(236,72,153,0.3)]"
           >
-            <MdCameraAlt className="text-sm" /> CAPTURE
+            <MdCameraAlt className="text-sm" /> {t.CAPTURE}
           </button>
           <button 
             onClick={() => { onClearGarden(); setIsOpen(false); }}
             className="flex-1 flex items-center justify-center gap-2 py-3 bg-red-600/20 hover:bg-red-600/40 border border-red-500/30 rounded-xl transition-all font-bold text-[9px] tracking-widest uppercase text-red-400"
           >
-            <MdDeleteSweep className="text-sm" /> CLEAR
+            <MdDeleteSweep className="text-sm" /> {t.CLEAR}
           </button>
         </div>
 
-        <ControlSlider label="World Growth Scale" value={growthHeight} min={0.2} max={1.5} step={0.01} onChange={setGrowthHeight} unit="%" />
+        <div className="mb-6">
+           <label className="text-[10px] text-gray-400 uppercase font-bold tracking-wider mb-3 block">{t.LANGUAGE}</label>
+           <div className="flex gap-2">
+              <button 
+                onClick={() => setLang('CN')}
+                className={twMerge(
+                  "flex-1 py-2 rounded-lg text-[9px] font-bold tracking-widest border transition-all",
+                  lang === 'CN' ? "bg-white text-black border-white" : "bg-transparent text-gray-500 border-white/10 hover:bg-white/5"
+                )}
+              >
+                中文
+              </button>
+              <button 
+                onClick={() => setLang('EN')}
+                className={twMerge(
+                  "flex-1 py-2 rounded-lg text-[9px] font-bold tracking-widest border transition-all",
+                  lang === 'EN' ? "bg-white text-black border-white" : "bg-transparent text-gray-500 border-white/10 hover:bg-white/5"
+                )}
+              >
+                ENGLISH
+              </button>
+           </div>
+        </div>
+
+        <ControlSlider label={t.GROWTH_SCALE} value={growthHeight} min={0.2} max={1.5} step={0.01} onChange={setGrowthHeight} unit="%" />
 
         <div className="mb-6">
-          <label className="text-[10px] text-gray-400 uppercase font-bold tracking-wider mb-3 block">Perspective</label>
+          <label className="text-[10px] text-gray-400 uppercase font-bold tracking-wider mb-3 block">{t.PERSPECTIVE}</label>
           <div className="flex gap-2">
             <button 
               onClick={() => setBgMode(BackgroundMode.Camera)}
@@ -152,7 +218,7 @@ export const WorldControls: React.FC<WorldControlsProps> = ({
                 bgMode === BackgroundMode.Camera ? "bg-white text-black border-white" : "bg-transparent text-gray-500 border-white/10 hover:bg-white/5"
               )}
             >
-              <MdVideocam className="text-sm" /> AR VIEW
+              <MdVideocam className="text-sm" /> {t.AR_VIEW}
             </button>
             <button 
               onClick={() => setBgMode(BackgroundMode.Artistic)}
@@ -161,19 +227,19 @@ export const WorldControls: React.FC<WorldControlsProps> = ({
                 bgMode === BackgroundMode.Artistic ? "bg-white text-black border-white" : "bg-transparent text-gray-500 border-white/10 hover:bg-white/5"
               )}
             >
-              <MdBrush className="text-sm" /> ARTISTIC
+              <MdBrush className="text-sm" /> {t.ARTISTIC}
             </button>
           </div>
         </div>
 
         <div className="mb-6 bg-white/5 p-4 rounded-2xl border border-white/5">
           <div className="flex justify-between items-center mb-4">
-            <label className="text-[10px] text-gray-400 uppercase font-bold tracking-wider block">Biome DNA</label>
+            <label className="text-[10px] text-gray-400 uppercase font-bold tracking-wider block">{t.BIOME_DNA}</label>
             <button 
               onClick={onApplyBiomeToAll}
               className="text-[8px] font-black tracking-widest text-pink-400 hover:text-white transition-all"
             >
-              MUTATE ALL
+              {t.MUTATE}
             </button>
           </div>
           <div className="grid grid-cols-4 gap-3">
@@ -196,12 +262,12 @@ export const WorldControls: React.FC<WorldControlsProps> = ({
 
         <div className="mb-8">
           <div className="flex justify-between items-center mb-4">
-            <label className="text-[10px] text-gray-400 uppercase font-bold tracking-wider block">Flower Species</label>
+            <label className="text-[10px] text-gray-400 uppercase font-bold tracking-wider block">{t.SPECIES}</label>
             <button 
               onClick={onApplySpeciesToAll}
               className="text-[8px] font-black tracking-widest text-pink-400 hover:text-white transition-all"
             >
-              CONVERT ALL
+              {t.CONVERT}
             </button>
           </div>
           <div className="grid grid-cols-2 gap-2">
@@ -223,7 +289,7 @@ export const WorldControls: React.FC<WorldControlsProps> = ({
         </div>
 
         <div className="mt-auto pt-6 border-t border-white/10">
-          <label className="text-[10px] text-gray-400 uppercase font-bold tracking-wider mb-2 block">Hardware Output</label>
+          <label className="text-[10px] text-gray-400 uppercase font-bold tracking-wider mb-2 block">{t.HARDWARE}</label>
           <select 
             value={selectedCamera} 
             onChange={(e) => setSelectedCamera(e.target.value)}

@@ -1,5 +1,5 @@
 
-const GARDEN_MESSAGES = [
+const GARDEN_MESSAGES_CN = [
   "指尖滑过空气，仿佛唤醒了沉睡的星尘。",
   "每一朵绽放的花，都是大地对天空的深情告白。",
   "这里的色彩，像是打翻了上帝的调色盘。",
@@ -102,12 +102,115 @@ const GARDEN_MESSAGES = [
   "最后，请记住这片花园，它是你创造的奇迹。"
 ];
 
-export const analyzeGarden = async (imageBase64: string, flowerCount: number): Promise<string> => {
-  // Logic replaced with local random selection from 100 messages as requested
-  const randomIndex = Math.floor(Math.random() * GARDEN_MESSAGES.length);
+const GARDEN_MESSAGES_EN = [
+  "Fingertips glide through the air, awakening sleeping stardust.",
+  "Every blooming flower is a profound confession from Earth to the sky.",
+  "The colors here look like God's spilled palette.",
+  "The sound of growth in the play of light is as beautiful as poetry.",
+  "You plant not just seeds, but expectations for a beautiful life.",
+  "A breeze weaves through petals, taking the last chill of winter away.",
+  "The flowers seem to be whispering about tomorrow's dew.",
+  "In this digital corner, I see the most primal rhythm of life.",
+  "Sunlight kisses the seedlings; every inch of vitality is precious.",
+  "Among the flowers, the line between reality and illusion blurs.",
+  "Listen, that's the surprise the seeds give to the world as they burst.",
+  "Flowers bloom silently, yet leave the most charming scent in the air.",
+  "Your palms seem to hide the secret code of spring.",
+  "Every plant here remembers your gentle gaze.",
+  "If moonlight fell here, it would be soaked in floral fragrance.",
+  "In a noisy world, this small garden is a sanctuary for the soul.",
+  "The veins of every leaf are written with the wonders of nature.",
+  "You are the creator of this micro-universe, making colors dance.",
+  "The halo on the petals is a digital tribute to nature.",
+  "Spring never ends here, as long as you keep planting hope.",
+  "Stars fall to earth and transform into these colorful beings.",
+  "The temperature of your touch is what the flowers crave most.",
+  "Every bloom is a miracle across dimensions.",
+  "This is your secret forest, hiding the breath of the wind.",
+  "If butterflies flew in here, they would get lost in the fragrance.",
+  "You create not just a landscape, but a moment of tranquility.",
+  "The green here has a healing power to smooth all wrinkles.",
+  "The moment a seed lands, a dream is born.",
+  "The garden understands every smile of yours.",
+  "In these lines and colors, I read the resilience of life.",
+  "Morning sun on the flower's heart is nature's gentlest awakening.",
+  "Your fingertip magic makes even steel and concrete bloom.",
+  "Life here is so light, it feels like it could turn into light at any time.",
+  "Every petal carries a whimsical idea about beauty.",
+  "May the peace of this garden stay in your heart for a long time.",
+  "When the wind blows, the flowers dance in a way only you understand.",
+  "Here, new stories sprout quietly every second.",
+  "This sea of colors is the most beautiful gift you give to the world.",
+  "Look at the budding posture, full of desire for the unknown.",
+  "Flowers never wither here because they grow in your love.",
+  "Every scent is a digital soul's longing for reality.",
+  "In this fantasy space, you are the only colorist.",
+  "The fire of life is lit here, reflecting your focused eyes.",
+  "This is not just a garden, but a pure land in your heart.",
+  "Look, those flowers are trying to grow in your direction.",
+  "Every pixel's movement is a tribute to nature's craftsmanship.",
+  "The world here is small, but it can hold all your gentleness.",
+  "A bloom in a moment is eternity in this sea of code.",
+  "You are the guide for this vitality, showing them the world.",
+  "May these flowers illuminate every tired moment of yours.",
+  "Every sprout is struggling to tell the joy of survival.",
+  "The clouds here seem to be tainted with the smell of flowers.",
+  "You irrigate with imagination and harvest this brilliance.",
+  "In this quiet moment, even the air becomes sweet.",
+  "All things have spirits, especially these flowers you planted.",
+  "The harmony of colors is the most beautiful melody here.",
+  "Every flower has its personality, bold or shy.",
+  "Here, time seems to stand still, only vitality flows.",
+  "Every touch of yours is a deep caress of the earth.",
+  "The scenery here is more moving than a dream.",
+  "May your life be as fresh as this garden.",
+  "This is the most beautiful encounter between technology and nature.",
+  "Every refraction of light crowns your work.",
+  "There are countless springs hidden here, waiting for you to discover.",
+  "Your creativity makes this void burst into a brilliant rainbow.",
+  "Look at the texture of the petals, as if they were within reach.",
+  "The vitality here is the warmest miracle in the code world.",
+  "Every seed harbors the dream of becoming a forest.",
+  "Your focus makes these flowers look their most confident.",
+  "You are the only invited guest to this colorful party.",
+  "May the fragrance of this garden take away all your worries.",
+  "The most beautiful form of life is to bloom freely right now.",
+  "Every inch of space here is full of exploratory fun.",
+  "You are the guardian of this illusion, watching over every bud.",
+  "Every bloom is a profound discussion about beauty.",
+  "Under your defined gravity, flowers bloom freely.",
+  "There is no severe cold here, only your eternal warm spring.",
+  "The posture of every flower is a facet of your personality.",
+  "Look, even light and shadow chase the warmth of your fingertips.",
+  "Nature here is the crystallization of human wisdom and emotion.",
+  "Every fleeting moment deserves to be treated gently.",
+  "May this brilliance be the source of your creative inspiration.",
+  "You can be anyone here, as long as you are willing to plant.",
+  "The breath of flowers is the gentlest background sound here.",
+  "Your smile is the best fertilizer for this garden.",
+  "See the myriad of colors, all a manifestation of your will.",
+  "Every overlay of color achieves a visual feast.",
+  "Every drop of dew in this garden reflects your shadow.",
+  "May this peace accompany you through every quiet night.",
+  "Life here is simple, yet has a breathtaking beauty.",
+  "Every circle you draw here becomes a micro-world.",
+  "The low hum of petals is a love song for this era.",
+  "Here, we redefine the meaning of 'growth'.",
+  "May this garden become an eternal landscape in your heart.",
+  "Every curve is a projection of natural rhythm in the digital world.",
+  "The fragrance here is invisible, but can penetrate your soul.",
+  "Look at that bloom, doesn't it look like your first love?",
+  "In this parallel space-time, flowers represent pure hope.",
+  "May this brilliance add a touch of color to your ordinary days.",
+  "Finally, remember this garden, it is a miracle you created."
+];
+
+export const analyzeGarden = async (imageBase64: string, flowerCount: number, lang: 'CN' | 'EN' = 'CN'): Promise<string> => {
+  const pool = lang === 'CN' ? GARDEN_MESSAGES_CN : GARDEN_MESSAGES_EN;
+  const randomIndex = Math.floor(Math.random() * pool.length);
   return new Promise((resolve) => {
     setTimeout(() => {
-      resolve(GARDEN_MESSAGES[randomIndex]);
-    }, 600); // Slight delay for realistic feel
+      resolve(pool[randomIndex]);
+    }, 600);
   });
 };
