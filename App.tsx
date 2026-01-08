@@ -361,9 +361,10 @@ function App() {
     });
     ctx.globalAlpha = 1.0;
 
+    // Subtler dirt gradient to maintain original brightness
     const soilGrad = ctx.createLinearGradient(0, groundY, 0, height);
-    soilGrad.addColorStop(0, 'rgba(30, 15, 5, 0.4)');
-    soilGrad.addColorStop(1, 'rgba(0, 0, 0, 0.8)');
+    soilGrad.addColorStop(0, 'rgba(30, 15, 5, 0.2)');
+    soilGrad.addColorStop(1, 'rgba(0, 0, 0, 0.5)');
     ctx.fillStyle = soilGrad;
     ctx.fillRect(0, groundY, width, height - groundY);
 
@@ -693,7 +694,7 @@ function App() {
         <video 
           ref={videoRef} 
           style={{ transform: `scaleX(-1)`, visibility: bgMode === BackgroundMode.Camera ? 'visible' : 'hidden' }}
-          className="absolute inset-0 w-full h-full object-fill opacity-60" 
+          className="absolute inset-0 w-full h-full object-fill opacity-100" 
           playsInline muted 
         />
         <canvas ref={canvasRef} className="absolute inset-0 w-full h-full transform scale-x-[-1] pointer-events-none" />
