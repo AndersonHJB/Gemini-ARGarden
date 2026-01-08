@@ -83,36 +83,37 @@ const UI_STRINGS = {
 
 export const StatusPanel: React.FC<StatusPanelProps> = ({ isPinching, isMouthOpen, isFist, fistTimeRemaining, lang }) => {
   const t = UI_STRINGS[lang];
+  
   const itemClass = (active: boolean, isClear: boolean = false) => 
     twMerge(
-      "flex items-center gap-3 px-4 py-2 rounded-lg text-[10px] font-bold tracking-widest transition-all duration-300 border min-w-[160px] sm:min-w-[180px] backdrop-blur-md",
+      "flex items-center gap-3 px-5 py-3 rounded-xl text-[11px] font-black tracking-[0.15em] transition-all duration-300 border-2 shadow-2xl backdrop-blur-xl min-w-[180px] sm:min-w-[200px]",
       active 
         ? isClear 
-          ? "bg-red-600/90 text-white border-red-400 shadow-[0_0_20px_rgba(220,38,38,0.6)] scale-105"
-          : "bg-pink-500/90 text-white border-pink-400 shadow-[0_0_20px_rgba(236,72,153,0.6)] scale-105" 
-        : "bg-black/40 text-gray-500 border-white/5"
+          ? "bg-red-600/90 text-white border-red-400/50 shadow-[0_0_25px_rgba(220,38,38,0.5)] scale-105"
+          : "bg-pink-500/90 text-white border-pink-400/50 shadow-[0_0_25px_rgba(236,72,153,0.5)] scale-105" 
+        : "bg-black/75 text-gray-300 border-white/20"
     );
 
   const indicatorClass = (active: boolean) =>
     twMerge(
-      "w-2 h-2 rounded-full transition-all duration-300", 
-      active ? "bg-white shadow-[0_0_10px_rgba(255,255,255,1)] scale-125" : "bg-gray-600"
+      "w-2.5 h-2.5 rounded-full transition-all duration-300", 
+      active ? "bg-white shadow-[0_0_12px_rgba(255,255,255,1)] scale-125" : "bg-gray-600"
     );
 
   return (
-    <div className="absolute top-4 sm:top-6 left-4 sm:left-6 flex flex-col gap-2 z-20 font-mono pointer-events-none">
+    <div className="absolute top-6 left-6 flex flex-col gap-3 z-20 font-mono pointer-events-none">
       <div className={itemClass(isPinching)}>
         <div className={indicatorClass(isPinching)} />
-        {t.PINCH}
+        <span className="drop-shadow-sm">{t.PINCH}</span>
       </div>
       <div className={itemClass(isMouthOpen)}>
         <div className={indicatorClass(isMouthOpen)} />
-        {t.MOUTH}
+        <span className="drop-shadow-sm">{t.MOUTH}</span>
       </div>
       {isFist && (
         <div className={itemClass(isFist, true)}>
           <div className={indicatorClass(isFist)} />
-          <div className="flex-1">{t.CLEARING}</div>
+          <div className="flex-1 drop-shadow-sm">{t.CLEARING}</div>
           <span className="text-[12px] font-black tabular-nums">
             {fistTimeRemaining.toFixed(1)}s
           </span>
