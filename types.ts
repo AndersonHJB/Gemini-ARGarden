@@ -62,25 +62,44 @@ export const BIOME_COLORS: Record<BiomeTheme, string[]> = {
   [BiomeTheme.Lavender]: ['#E0C3FC', '#8EC5FC', '#C2E9FB', '#A18CD1']
 };
 
-export const ARTISTIC_BG: Record<BiomeTheme, { sky: string[], ground: string, accent: string }> = {
+export interface ArtisticConfig {
+  sky: string[];
+  ground: string;
+  accent: string;
+  secondaryAccent?: string;
+  particleType: 'none' | 'star' | 'bubble' | 'firefly' | 'flare';
+  showHills: boolean;
+}
+
+export const ARTISTIC_BG: Record<BiomeTheme, ArtisticConfig> = {
   [BiomeTheme.Sunset]: {
-    sky: ['#2D3436', '#D63031', '#E17055'],
-    ground: '#2D3436',
-    accent: '#FAD390'
+    sky: ['#1a0a2e', '#4a154b', '#ff4d6d', '#ffb38a'],
+    ground: '#1a0a2e',
+    accent: '#ff9e00',
+    secondaryAccent: '#ff5400',
+    particleType: 'flare',
+    showHills: true
   },
   [BiomeTheme.Ocean]: {
-    sky: ['#0984E3', '#74B9FF', '#81ECEC'],
-    ground: '#006266',
-    accent: '#55EFC4'
+    sky: ['#03045e', '#0077b6', '#00b4d8', '#90e0ef'],
+    ground: '#023e8a',
+    accent: '#caf0f8',
+    particleType: 'bubble',
+    showHills: false
   },
   [BiomeTheme.Forest]: {
-    sky: ['#1B4F72', '#2ECC71', '#ABEBC6'],
-    ground: '#186A3B',
-    accent: '#F4D03F'
+    sky: ['#081c15', '#1b4332', '#2d6a4f', '#74c69d'],
+    ground: '#081c15',
+    accent: '#d8f3dc',
+    particleType: 'firefly',
+    showHills: true
   },
   [BiomeTheme.Lavender]: {
-    sky: ['#4834D4', '#686DE0', '#BE90D4'],
-    ground: '#30336B',
-    accent: '#EBBEBB'
+    sky: ['#240046', '#3c096c', '#7b2cbf', '#c77dff'],
+    ground: '#10002b',
+    accent: '#e0aaff',
+    secondaryAccent: '#ffffff',
+    particleType: 'star',
+    showHills: true
   }
 };

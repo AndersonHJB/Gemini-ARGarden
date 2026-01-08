@@ -188,31 +188,113 @@ function App() {
 
   const drawArtisticBackground = (ctx: CanvasRenderingContext2D, width: number, height: number, theme: BiomeTheme) => {
     const config = ARTISTIC_BG[theme];
+    const time = performance.now();
+
+    // 1. Sky Gradient
     const skyGrad = ctx.createLinearGradient(0, 0, 0, height);
     config.sky.forEach((color, i) => skyGrad.addColorStop(i / (config.sky.length - 1), color));
     ctx.fillStyle = skyGrad;
     ctx.fillRect(0, 0, width, height);
 
+    // 2. Distant atmospheric elements based on theme
     ctx.save();
-    ctx.fillStyle = config.accent;
-    ctx.globalAlpha = 0.8;
-    ctx.shadowBlur = 40;
-    ctx.shadowColor = config.accent;
-    ctx.beginPath();
-    ctx.arc(width * 0.75, height * 0.25, 60, 0, Math.PI * 2);
-    ctx.fill();
+    if (config.particleType === 'star') {
+      ctx.fillStyle = '#ffffff';
+      for (let i = 0; i < 100; i++) {
+        const x = (Math.sin(i * 1234.5) * 0.5 + 0.5) * width;
+        const y = (Math.cos(i * 6789.0) * 0.5 + 0.5) * height * 0.7;
+        const size = (Math.sin(time * 0.001 + i) * 0.5 + 0.5) * 2;
+        ctx.globalAlpha = Math.sin(time * 0.002 + i) * 0.4 + 0.6;
+        ctx.beginPath(); ctx.arc(x, y, size, 0, Math.PI * 2); ctx.fill();
+      }
+    } else if (config.particleType === 'bubble') {
+      ctx.strokeStyle = '#ffffff33';
+      for (let i = 0; i < 30; i++) {
+        const x = (Math.sin(i * 456.7) * 0.5 + 0.5) * width;
+        const y = ((time * 0.05 + i * 100) % height);
+        const size = (Math.cos(i) * 5 + 10);
+        ctx.beginPath(); ctx.arc(x, height - y, size, 0, Math.PI * 2); ctx.stroke();
+      }
+    } else if (config.particleType === 'firefly') {
+      ctx.fillStyle = config.accent;
+      ctx.shadowBlur = 15;
+      ctx.shadowColor = config.accent;
+      for (let i = 0; i < 25; i++) {
+        const tx = time * 0.001;
+        const x = (Math.sin(tx + i * 10) * 0.2 + 0.5 + Math.sin(i * 3) * 0.4) * width;
+        const y = (Math.cos(tx * 0.8 + i * 5) * 0.2 + 0.4 + Math.cos(i * 2) * 0.3) * height;
+        ctx.globalAlpha = Math.sin(tx * 3 + i) * 0.5 + 0.5;
+        ctx.beginPath(); ctx.arc(x, y, 2.5, 0, Math.PI * 2); ctx.fill();
+      }
+    }
     ctx.restore();
 
-    ctx.fillStyle = config.ground;
-    ctx.beginPath();
-    ctx.moveTo(0, height * 0.85);
-    ctx.lineTo(width * 0.4, height * 0.75);
-    ctx.lineTo(width * 0.7, height * 0.88);
-    ctx.lineTo(width, height * 0.82);
-    ctx.lineTo(width, height);
-    ctx.lineTo(0, height);
-    ctx.closePath();
-    ctx.fill();
+    // 3. Main Accent (Sun/Moon/Core)
+    ctx.save();
+    ctx.fillStyle = config.accent;
+    ctx.shadowBlur = 60;
+    ctx.shadowColor = config.accent;
+    ctx.globalAlpha = 0.9;
+    
+    if (theme === BiomeTheme.Sunset) {
+      // Big Sun
+      const sunX = width * 0.75;
+      const sunY = height * 0.4;
+      ctx.beginPath(); ctx.arc(sunX, sunY, 80, 0, Math.PI * 2); ctx.fill();
+      // Glow rings
+      ctx.shadowBlur = 0;
+      ctx.globalAlpha = 0.1;
+      ctx.beginPath(); ctx.arc(sunX, sunY, 120, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(sunX, sunY, 160, 0, Math.PI * 2); ctx.fill();
+    } else if (theme === BiomeTheme.Ocean) {
+      // Light rays
+      const rayGrad = ctx.createLinearGradient(0, 0, 0, height);
+      rayGrad.addColorStop(0, 'rgba(255,255,255,0.2)');
+      rayGrad.addColorStop(1, 'transparent');
+      ctx.fillStyle = rayGrad;
+      for (let i = 0; i < 5; i++) {
+        const rx = width * (0.2 + i * 0.15) + Math.sin(time * 0.001 + i) * 50;
+        ctx.beginPath();
+        ctx.moveTo(rx - 40, 0);
+        ctx.lineTo(rx + 40, 0);
+        ctx.lineTo(rx + 100, height);
+        ctx.lineTo(rx - 100, height);
+        ctx.fill();
+      }
+    } else {
+      ctx.beginPath(); ctx.arc(width * 0.8, height * 0.2, 50, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.restore();
+
+    // 4. Hills / Depth Silhouettes
+    if (config.showHills) {
+      ctx.fillStyle = config.ground;
+      // Mid hill
+      ctx.globalAlpha = 0.4;
+      ctx.beginPath();
+      ctx.moveTo(0, height * 0.8);
+      for (let i = 0; i <= 10; i++) {
+        const hx = (i / 10) * width;
+        const hy = height * 0.75 + Math.sin(i * 1.5 + theme.length) * 40;
+        ctx.lineTo(hx, hy);
+      }
+      ctx.lineTo(width, height); ctx.lineTo(0, height); ctx.fill();
+      
+      // Front hill
+      ctx.globalAlpha = 1.0;
+      ctx.beginPath();
+      ctx.moveTo(0, height * 0.9);
+      ctx.lineTo(width * 0.3, height * 0.82);
+      ctx.lineTo(width * 0.6, height * 0.92);
+      ctx.lineTo(width, height * 0.85);
+      ctx.lineTo(width, height);
+      ctx.lineTo(0, height);
+      ctx.fill();
+    } else {
+      // Ground plane
+      ctx.fillStyle = config.ground;
+      ctx.fillRect(0, height * 0.85, width, height * 0.15);
+    }
   };
 
   const handleClearGarden = useCallback(() => {
@@ -657,7 +739,7 @@ function App() {
     tctx.fillText(`"${reflection}"`, tempCanvas.width / 2, y);
 
     // App Branding
-    tctx.globalAlpha = 0.5;
+    tctx.globalAlpha = 0.7;
     tctx.font = 'bold 13px "Inter", sans-serif';
     tctx.textAlign = 'right';
     tctx.fillText('指尖上的灵动花园｜源自：Bornforthis AI实验室', tempCanvas.width - 40, tempCanvas.height - 30);
