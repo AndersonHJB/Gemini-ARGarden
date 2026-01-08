@@ -1,7 +1,7 @@
 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { visionService } from './services/visionService';
-import { analyzeGarden } from './services/geminiService';
+import { analyzeGarden, getRandomMessage } from './services/geminiService';
 import { StatusPanel, WorldControls } from './components/Controls';
 import { BiomeTheme, BIOME_COLORS, Flower, FlowerSpecies, Point, Seed, Particle, BackgroundMode, ARTISTIC_BG } from './types';
 import { MdAutoAwesome, MdDownload, MdClose } from "react-icons/md";
@@ -38,6 +38,8 @@ function App() {
   const biomeRef = useRef<BiomeTheme>(BiomeTheme.Sunset);
   const speciesRef = useRef<FlowerSpecies>(FlowerSpecies.Random);
   const growthHeightRef = useRef(1.0);
+  const growthSpeedRef = useRef(1.0);
+  const petalScaleRef = useRef(1.0);
   const bgModeRef = useRef<BackgroundMode>(BackgroundMode.Camera);
 
   const [loaded, setLoaded] = useState(false);
@@ -55,6 +57,8 @@ function App() {
   const [biome, setBiomeState] = useState<BiomeTheme>(BiomeTheme.Sunset);
   const [species, setSpeciesState] = useState<FlowerSpecies>(FlowerSpecies.Random);
   const [growthHeight, setGrowthHeightState] = useState(1.0);
+  const [growthSpeed, setGrowthSpeedState] = useState(1.0);
+  const [petalScale, setPetalScaleState] = useState(1.0);
   const [bgMode, setBgMode] = useState<BackgroundMode>(BackgroundMode.Camera);
 
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -64,6 +68,8 @@ function App() {
   useEffect(() => { biomeRef.current = biome; }, [biome]);
   useEffect(() => { speciesRef.current = species; }, [species]);
   useEffect(() => { growthHeightRef.current = growthHeight; }, [growthHeight]);
+  useEffect(() => { growthSpeedRef.current = growthSpeed; }, [growthSpeed]);
+  useEffect(() => { petalScaleRef.current = petalScale; }, [petalScale]);
   useEffect(() => { bgModeRef.current = bgMode; }, [bgMode]);
 
   useEffect(() => {
@@ -138,7 +144,6 @@ function App() {
   const createFlower = (relX: number, theme: BiomeTheme, spec: FlowerSpecies): Flower => {
     let colorPool = BIOME_COLORS[theme];
     const color = colorPool[Math.floor(Math.random() * colorPool.length)];
-    // Ensure secondary color is different if possible
     let secondaryColor = colorPool[(colorPool.indexOf(color) + 1) % colorPool.length];
     
     const speciesOptions = Object.values(FlowerSpecies).filter(s => s !== FlowerSpecies.Random);
@@ -321,13 +326,13 @@ function App() {
     seedsRef.current = seedsRef.current.filter(s => s.y < groundY);
 
     flowersRef.current.forEach(f => {
-      const rate = (mouthOpen ? 6.0 : 0) * dt; 
+      const rate = (mouthOpen ? (6.0 * growthSpeedRef.current) : 0) * dt; 
       if (f.currentHeight < f.maxHeight) {
         f.currentHeight += rate;
         if (f.currentHeight > f.maxHeight) f.currentHeight = f.maxHeight;
       } 
       if (f.currentHeight > f.maxHeight * 0.3 && f.bloomProgress < 1) {
-        f.bloomProgress += (mouthOpen ? 0.09 : 0.01) * dt;
+        f.bloomProgress += (mouthOpen ? (0.09 * growthSpeedRef.current) : 0.01) * dt;
       }
     });
 
@@ -362,7 +367,6 @@ function App() {
     });
     ctx.globalAlpha = 1.0;
 
-    // Subtler dirt gradient to maintain original brightness
     const soilGrad = ctx.createLinearGradient(0, groundY, 0, height);
     soilGrad.addColorStop(0, 'rgba(30, 15, 5, 0.2)');
     soilGrad.addColorStop(1, 'rgba(0, 0, 0, 0.5)');
@@ -430,7 +434,6 @@ function App() {
     ctx.lineCap = 'round';
     ctx.stroke();
 
-    // Leaves
     if (h > 50) {
       const leafCount = Math.floor(h / 80);
       for (let i = 0; i < leafCount; i++) {
@@ -443,7 +446,6 @@ function App() {
         ctx.rotate(isRight ? 0.7 : -0.7);
         ctx.fillStyle = '#388E3C';
         ctx.beginPath();
-        // 3D Flat Leaf: Two halves
         ctx.ellipse(isRight ? 8 : -8, 0, 12, 5, 0, 0, Math.PI * 2);
         ctx.fill();
         ctx.globalAlpha = 0.3;
@@ -455,10 +457,9 @@ function App() {
       }
     }
     
-    // Bloom
     if (f.bloomProgress > 0) {
       ctx.translate(tipX, tipY);
-      const scale = (f.maxHeight / 220) * growthHeightRef.current * Math.min(1.0, f.bloomProgress);
+      const scale = (f.maxHeight / 220) * growthHeightRef.current * petalScaleRef.current * Math.min(1.0, f.bloomProgress);
       ctx.scale(Math.max(0.01, scale), Math.max(0.01, scale));
       ctx.shadowBlur = 15;
       ctx.shadowColor = 'rgba(0,0,0,0.2)';
@@ -469,14 +470,11 @@ function App() {
 
   const renderFlowerHead = (ctx: CanvasRenderingContext2D, f: Flower) => {
     const { species, color, secondaryColor } = f;
-    const p = Math.min(1, f.bloomProgress);
 
     switch (species) {
       case FlowerSpecies.Daisy:
-        // 3D Flat Daisy: Layered needle petals
         ctx.save();
         const petalCount = 24;
-        // Outer Shadow layer
         ctx.fillStyle = 'rgba(0,0,0,0.1)';
         for (let i = 0; i < petalCount; i++) {
           ctx.rotate((Math.PI * 2) / petalCount);
@@ -484,7 +482,6 @@ function App() {
           ctx.ellipse(22, 1, 18, 3, 0, 0, Math.PI * 2);
           ctx.fill();
         }
-        // Main petals
         ctx.fillStyle = '#FFFFFF';
         for (let i = 0; i < petalCount; i++) {
           ctx.rotate((Math.PI * 2) / petalCount);
@@ -492,23 +489,16 @@ function App() {
           ctx.ellipse(20, 0, 18, 3.5, 0, 0, Math.PI * 2);
           ctx.fill();
         }
-        // Center 3D Flat
         const centerGrad = ctx.createRadialGradient(-3, -3, 0, 0, 0, 12);
         centerGrad.addColorStop(0, '#FFF176');
         centerGrad.addColorStop(0.7, '#FBC02D');
         centerGrad.addColorStop(1, '#F57F17');
         ctx.fillStyle = centerGrad;
         ctx.beginPath(); ctx.arc(0, 0, 11, 0, Math.PI * 2); ctx.fill();
-        // Neon highlights on center
-        ctx.strokeStyle = '#FFEE58';
-        ctx.lineWidth = 1;
-        ctx.setLineDash([2, 2]);
-        ctx.beginPath(); ctx.arc(0, 0, 7, 0, Math.PI * 2); ctx.stroke();
         ctx.restore();
         break;
 
       case FlowerSpecies.Rose:
-        // 3D Flat Rose: Layered geometric spiraling petals
         const roseLayers = 3;
         for (let l = 0; l < roseLayers; l++) {
           const count = 5 + l;
@@ -524,26 +514,18 @@ function App() {
             ctx.quadraticCurveTo(radius, -radius, radius * 1.5, 0);
             ctx.quadraticCurveTo(radius, radius, 0, 0);
             ctx.fill();
-            // Edge highlight
-            ctx.strokeStyle = 'rgba(255,255,255,0.2)';
-            ctx.lineWidth = 1;
-            ctx.stroke();
           }
           ctx.restore();
         }
-        // Core
         ctx.fillStyle = secondaryColor;
         ctx.beginPath(); ctx.arc(0, 0, 5, 0, Math.PI * 2); ctx.fill();
         break;
 
       case FlowerSpecies.Tulip:
-        // 3D Flat Tulip: Three overlapping vertical petals
-        // Back petal (darker/accent)
         ctx.fillStyle = secondaryColor;
         ctx.beginPath();
         ctx.ellipse(0, -18, 12, 28, 0, 0, Math.PI * 2);
         ctx.fill();
-        // Side petals (main color)
         ctx.fillStyle = color;
         ctx.save();
         ctx.rotate(-0.2);
@@ -553,21 +535,10 @@ function App() {
         ctx.rotate(0.2);
         ctx.beginPath(); ctx.ellipse(8, -15, 12, 24, 0, 0, Math.PI * 2); ctx.fill();
         ctx.restore();
-        // Light highlight on one side
-        ctx.fillStyle = 'rgba(255,255,255,0.15)';
-        ctx.beginPath(); ctx.ellipse(-10, -15, 4, 15, 0.1, 0, Math.PI * 2); ctx.fill();
         break;
 
       case FlowerSpecies.Lily:
-        // 3D Flat Lily: Star-shaped elongated petals with depth shadows
         const lilyCount = 6;
-        // Depth layer
-        ctx.fillStyle = 'rgba(0,0,0,0.15)';
-        for (let i = 0; i < lilyCount; i++) {
-          ctx.rotate((Math.PI * 2) / lilyCount);
-          ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(38, -2); ctx.lineTo(42, 2); ctx.fill();
-        }
-        // Main petals
         ctx.fillStyle = color;
         for (let i = 0; i < lilyCount; i++) {
           ctx.rotate((Math.PI * 2) / lilyCount);
@@ -576,56 +547,32 @@ function App() {
           ctx.quadraticCurveTo(20, -12, 40, 0);
           ctx.quadraticCurveTo(20, 12, 0, 0);
           ctx.fill();
-          // Stripe detail
           ctx.fillStyle = secondaryColor;
           ctx.globalAlpha = 0.4;
           ctx.beginPath(); ctx.ellipse(15, 0, 10, 1.5, 0, 0, Math.PI * 2); ctx.fill();
           ctx.globalAlpha = 1.0;
           ctx.fillStyle = color;
         }
-        // Pistils
-        ctx.fillStyle = '#FBC02D';
-        for (let i = 0; i < 3; i++) {
-          ctx.rotate(1);
-          ctx.beginPath(); ctx.rect(0, -1, 15, 2); ctx.fill();
-          ctx.beginPath(); ctx.arc(15, 0, 2.5, 0, Math.PI * 2); ctx.fill();
-        }
         break;
 
       case FlowerSpecies.Poppy:
-        // 3D Flat Poppy: Broad overlapping floppy petals
         ctx.save();
         const poppyPetals = 4;
         for (let i = 0; i < poppyPetals; i++) {
           ctx.rotate((Math.PI * 2) / poppyPetals);
-          // Petal Shadow
-          ctx.fillStyle = 'rgba(0,0,0,0.1)';
-          ctx.beginPath(); ctx.ellipse(18, 2, 22, 16, 0.1, 0, Math.PI * 2); ctx.fill();
-          // Main Petal
           ctx.fillStyle = color;
           ctx.beginPath(); ctx.ellipse(18, 0, 22, 16, 0, 0, Math.PI * 2); ctx.fill();
-          // Inner detail
-          ctx.fillStyle = secondaryColor;
-          ctx.globalAlpha = 0.2;
-          ctx.beginPath(); ctx.arc(5, 0, 8, 0, Math.PI * 2); ctx.fill();
-          ctx.globalAlpha = 1.0;
         }
-        // Seed head (3D Flat)
         ctx.fillStyle = '#1A1A1A';
         ctx.beginPath(); ctx.arc(0, 0, 9, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = '#2E7D32';
-        ctx.beginPath(); ctx.arc(0, 0, 4, 0, Math.PI * 2); ctx.fill();
         ctx.restore();
         break;
 
       default:
-        // Random / Generic Star Flower
         for (let i = 0; i < 8; i++) {
           ctx.rotate((Math.PI * 2) / 8);
           ctx.fillStyle = color;
           ctx.beginPath(); ctx.ellipse(16, 0, 14, 6, 0, 0, Math.PI * 2); ctx.fill();
-          ctx.fillStyle = secondaryColor;
-          ctx.beginPath(); ctx.ellipse(10, 0, 6, 2, 0, 0, Math.PI * 2); ctx.fill();
         }
         ctx.fillStyle = '#FFFFFF';
         ctx.beginPath(); ctx.arc(0, 0, 5, 0, Math.PI * 2); ctx.fill();
@@ -665,19 +612,69 @@ function App() {
     const canvas = canvasRef.current;
     const video = videoRef.current;
     if (!canvas || !video) return;
+
     const tempCanvas = document.createElement('canvas');
     tempCanvas.width = canvas.width;
     tempCanvas.height = canvas.height;
     const tctx = tempCanvas.getContext('2d');
     if (!tctx) return;
+
     if (bgMode === BackgroundMode.Camera) {
-      tctx.save(); tctx.scale(-1, 1); tctx.drawImage(video, -tempCanvas.width, 0, tempCanvas.width, tempCanvas.height); tctx.restore();
+      tctx.save(); 
+      tctx.scale(-1, 1); 
+      tctx.drawImage(video, -tempCanvas.width, 0, tempCanvas.width, tempCanvas.height); 
+      tctx.restore();
     } else {
       drawArtisticBackground(tctx, tempCanvas.width, tempCanvas.height, biome);
     }
-    tctx.save(); tctx.scale(-1, 1); tctx.drawImage(canvas, -tempCanvas.width, 0, tempCanvas.width, tempCanvas.height); tctx.restore();
+
+    tctx.save(); 
+    tctx.scale(-1, 1); 
+    tctx.drawImage(canvas, -tempCanvas.width, 0, tempCanvas.width, tempCanvas.height); 
+    tctx.restore();
+
+    // Add Reflection Overlay
+    const reflection = getRandomMessage(lang);
+    tctx.save();
+    
+    // Bottom Gradient Overlay for text readability
+    const gradHeight = 160;
+    const textGrad = tctx.createLinearGradient(0, tempCanvas.height - gradHeight, 0, tempCanvas.height);
+    textGrad.addColorStop(0, 'transparent');
+    textGrad.addColorStop(1, 'rgba(0,0,0,0.8)');
+    tctx.fillStyle = textGrad;
+    tctx.fillRect(0, tempCanvas.height - gradHeight, tempCanvas.width, gradHeight);
+
+    // Text Rendering
+    tctx.fillStyle = 'white';
+    tctx.shadowColor = 'black';
+    tctx.shadowBlur = 10;
+    tctx.textAlign = 'center';
+    tctx.font = 'italic 600 24px "Inter", sans-serif';
+    
+    // Wrapping text if needed
+    const maxWidth = tempCanvas.width * 0.8;
+    const words = reflection.split(' ');
+    let line = '';
+    let y = tempCanvas.height - 70;
+    
+    // Simple line wrap for reflections
+    if (lang === 'CN') {
+       tctx.fillText(`"${reflection}"`, tempCanvas.width / 2, y);
+    } else {
+       tctx.fillText(`"${reflection}"`, tempCanvas.width / 2, y);
+    }
+
+    // App Branding
+    tctx.globalAlpha = 0.5;
+    tctx.font = 'black 12px "Inter", sans-serif';
+    tctx.textAlign = 'right';
+    tctx.fillText('GEMINI AR GARDEN', tempCanvas.width - 40, tempCanvas.height - 30);
+    
+    tctx.restore();
+
     setCapturedImage(tempCanvas.toDataURL('image/png'));
-  }, [bgMode, biome]);
+  }, [bgMode, biome, lang]);
 
   const downloadCapturedImage = () => {
     if (!capturedImage) return;
@@ -716,6 +713,8 @@ function App() {
           species={species} setSpecies={setSpeciesState}
           onApplySpeciesToAll={handleApplySpeciesToAll}
           growthHeight={growthHeight} setGrowthHeight={setGrowthHeightState}
+          growthSpeed={growthSpeed} setGrowthSpeed={setGrowthSpeedState}
+          petalScale={petalScale} setPetalScale={setPetalScaleState}
           cameras={cameras} selectedCamera={selectedCamera} setSelectedCamera={setSelectedCamera}
           bgMode={bgMode} setBgMode={setBgMode}
           onCapture={handleCapture}

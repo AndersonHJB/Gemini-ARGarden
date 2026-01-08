@@ -193,7 +193,7 @@ const GARDEN_MESSAGES_EN = [
   "Every drop of dew in this garden reflects your shadow.",
   "May this peace accompany you through every quiet night.",
   "Life here is simple, yet has a breathtaking beauty.",
-  "Every circle you draw here becomes a micro-world.",
+  "You here draw every circle, it becomes a micro-world.",
   "The low hum of petals is a love song for this era.",
   "Here, we redefine the meaning of 'growth'.",
   "May this garden become an eternal landscape in your heart.",
@@ -205,12 +205,15 @@ const GARDEN_MESSAGES_EN = [
   "Finally, remember this garden, it is a miracle you created."
 ];
 
-export const analyzeGarden = async (imageBase64: string, flowerCount: number, lang: 'CN' | 'EN' = 'CN'): Promise<string> => {
+export const getRandomMessage = (lang: 'CN' | 'EN'): string => {
   const pool = lang === 'CN' ? GARDEN_MESSAGES_CN : GARDEN_MESSAGES_EN;
-  const randomIndex = Math.floor(Math.random() * pool.length);
+  return pool[Math.floor(Math.random() * pool.length)];
+};
+
+export const analyzeGarden = async (imageBase64: string, flowerCount: number, lang: 'CN' | 'EN' = 'CN'): Promise<string> => {
   return new Promise((resolve) => {
     setTimeout(() => {
-      resolve(pool[randomIndex]);
+      resolve(getRandomMessage(lang));
     }, 600);
   });
 };

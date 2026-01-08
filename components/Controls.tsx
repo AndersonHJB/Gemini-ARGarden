@@ -23,6 +23,10 @@ interface WorldControlsProps {
   onApplySpeciesToAll: () => void;
   growthHeight: number;
   setGrowthHeight: (h: number) => void;
+  growthSpeed: number;
+  setGrowthSpeed: (s: number) => void;
+  petalScale: number;
+  setPetalScale: (s: number) => void;
   cameras: MediaDeviceInfo[];
   selectedCamera: string;
   setSelectedCamera: (id: string) => void;
@@ -43,6 +47,8 @@ const UI_STRINGS = {
     CAPTURE: "拍摄",
     CLEAR: "清除",
     GROWTH_SCALE: "世界生长比例",
+    GROWTH_SPEED: "生长活力",
+    PETAL_SIZE: "花瓣规模",
     PERSPECTIVE: "视角",
     AR_VIEW: "增强现实",
     ARTISTIC: "艺术视图",
@@ -61,6 +67,8 @@ const UI_STRINGS = {
     CAPTURE: "CAPTURE",
     CLEAR: "CLEAR",
     GROWTH_SCALE: "World Growth Scale",
+    GROWTH_SPEED: "Growth Vigor",
+    PETAL_SIZE: "Petal Scale",
     PERSPECTIVE: "Perspective",
     AR_VIEW: "AR VIEW",
     ARTISTIC: "ARTISTIC",
@@ -77,18 +85,18 @@ export const StatusPanel: React.FC<StatusPanelProps> = ({ isPinching, isMouthOpe
   const t = UI_STRINGS[lang];
   const itemClass = (active: boolean, isClear: boolean = false) => 
     twMerge(
-      "flex items-center gap-3 px-4 py-2 rounded-lg text-[10px] font-bold tracking-widest transition-all duration-300 border min-w-[160px] sm:min-w-[180px]",
+      "flex items-center gap-3 px-4 py-2 rounded-lg text-[10px] font-bold tracking-widest transition-all duration-300 border min-w-[160px] sm:min-w-[180px] backdrop-blur-md",
       active 
         ? isClear 
-          ? "bg-red-600/90 text-white border-red-400 shadow-[0_0_15px_rgba(220,38,38,0.5)] scale-105"
-          : "bg-pink-500/90 text-white border-pink-400 shadow-[0_0_15px_rgba(236,72,153,0.5)] scale-105" 
-        : "bg-black/40 text-gray-500 border-white/5 backdrop-blur-sm"
+          ? "bg-red-600/90 text-white border-red-400 shadow-[0_0_20px_rgba(220,38,38,0.6)] scale-105"
+          : "bg-pink-500/90 text-white border-pink-400 shadow-[0_0_20px_rgba(236,72,153,0.6)] scale-105" 
+        : "bg-black/40 text-gray-500 border-white/5"
     );
 
   const indicatorClass = (active: boolean) =>
     twMerge(
-      "w-1.5 h-1.5 rounded-full transition-all duration-300", 
-      active ? "bg-white shadow-[0_0_8px_rgba(255,255,255,0.8)] scale-125" : "bg-gray-600"
+      "w-2 h-2 rounded-full transition-all duration-300", 
+      active ? "bg-white shadow-[0_0_10px_rgba(255,255,255,1)] scale-125" : "bg-gray-600"
     );
 
   return (
@@ -118,7 +126,7 @@ const ControlSlider = ({ label, value, min, max, step, onChange, unit = "" }: an
   <div className="mb-5">
     <div className="flex justify-between text-[10px] text-gray-400 uppercase font-bold tracking-wider mb-2">
       <span>{label}</span>
-      <span className="text-pink-400">{Math.round(value * (unit === "%" ? 100 : 1))}{unit}</span>
+      <span className="text-pink-400 font-mono">{Math.round(value * (unit === "%" ? 100 : 1))}{unit}</span>
     </div>
     <div className="relative h-4 flex items-center">
        <input 
@@ -132,7 +140,8 @@ const ControlSlider = ({ label, value, min, max, step, onChange, unit = "" }: an
 
 export const WorldControls: React.FC<WorldControlsProps> = ({
   isOpen, setIsOpen, biome, setBiome, onApplyBiomeToAll, species, setSpecies, onApplySpeciesToAll, 
-  growthHeight, setGrowthHeight, cameras, selectedCamera, setSelectedCamera, bgMode, setBgMode, 
+  growthHeight, setGrowthHeight, growthSpeed, setGrowthSpeed, petalScale, setPetalScale,
+  cameras, selectedCamera, setSelectedCamera, bgMode, setBgMode, 
   onCapture, onClearGarden, lang, setLang
 }) => {
   const t = UI_STRINGS[lang];
@@ -206,7 +215,11 @@ export const WorldControls: React.FC<WorldControlsProps> = ({
            </div>
         </div>
 
-        <ControlSlider label={t.GROWTH_SCALE} value={growthHeight} min={0.2} max={1.5} step={0.01} onChange={setGrowthHeight} unit="%" />
+        <div className="bg-white/5 p-4 rounded-2xl border border-white/5 mb-6">
+          <ControlSlider label={t.GROWTH_SCALE} value={growthHeight} min={0.2} max={1.8} step={0.01} onChange={setGrowthHeight} unit="%" />
+          <ControlSlider label={t.GROWTH_SPEED} value={growthSpeed} min={0.2} max={2.0} step={0.1} onChange={setGrowthSpeed} unit="x" />
+          <ControlSlider label={t.PETAL_SIZE} value={petalScale} min={0.5} max={1.5} step={0.05} onChange={setPetalScale} unit="x" />
+        </div>
 
         <div className="mb-6">
           <label className="text-[10px] text-gray-400 uppercase font-bold tracking-wider mb-3 block">{t.PERSPECTIVE}</label>
