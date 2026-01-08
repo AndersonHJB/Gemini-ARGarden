@@ -653,23 +653,14 @@ function App() {
     tctx.font = 'italic 600 24px "Inter", sans-serif';
     
     // Wrapping text if needed
-    const maxWidth = tempCanvas.width * 0.8;
-    const words = reflection.split(' ');
-    let line = '';
     let y = tempCanvas.height - 70;
-    
-    // Simple line wrap for reflections
-    if (lang === 'CN') {
-       tctx.fillText(`"${reflection}"`, tempCanvas.width / 2, y);
-    } else {
-       tctx.fillText(`"${reflection}"`, tempCanvas.width / 2, y);
-    }
+    tctx.fillText(`"${reflection}"`, tempCanvas.width / 2, y);
 
     // App Branding
     tctx.globalAlpha = 0.5;
-    tctx.font = 'black 12px "Inter", sans-serif';
+    tctx.font = 'bold 13px "Inter", sans-serif';
     tctx.textAlign = 'right';
-    tctx.fillText('GEMINI AR GARDEN', tempCanvas.width - 40, tempCanvas.height - 30);
+    tctx.fillText('指尖上的灵动花园｜源自：Bornforthis AI实验室', tempCanvas.width - 40, tempCanvas.height - 30);
     
     tctx.restore();
 
