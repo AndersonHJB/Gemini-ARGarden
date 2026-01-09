@@ -18,6 +18,7 @@ function App() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const requestRef = useRef<number | null>(null);
+  const currentStreamRef = useRef<MediaStream | null>(null);
   
   const seedsRef = useRef<Seed[]>([]);
   const flowersRef = useRef<Flower[]>([]);
@@ -74,39 +75,105 @@ function App() {
   useEffect(() => { windStrengthRef.current = windStrength; }, [windStrength]);
   useEffect(() => { bgModeRef.current = bgMode; }, [bgMode]);
 
+  // Initial Setup: Permissions -> Stream -> Vision -> Devices
   useEffect(() => {
     const init = async () => {
-      await visionService.initialize();
-      const devices = await navigator.mediaDevices.enumerateDevices();
-      const videoDevices = devices.filter(device => device.kind === 'videoinput');
-      setCameras(videoDevices);
-      if (videoDevices.length > 0) setSelectedCamera(videoDevices[0].deviceId);
-      setLoaded(true);
-    };
-    init();
-  }, []);
-
-  useEffect(() => {
-    if (!selectedCamera || !videoRef.current) return;
-    const startStream = async () => {
       try {
+        // 1. Initialize Vision Service (Heavy task)
+        await visionService.initialize();
+
+        // 2. Request initial stream to trigger permissions (Default to user/front camera)
+        // Note: On iOS, we must get the stream BEFORE enumerating devices to get labels.
         const stream = await navigator.mediaDevices.getUserMedia({
-          video: { deviceId: selectedCamera, width: { ideal: 1280 }, height: { ideal: 720 } }
+          video: { 
+            facingMode: 'user', 
+            width: { ideal: 1280 }, 
+            height: { ideal: 720 } 
+          }
         });
+
+        currentStreamRef.current = stream;
+        
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
+          // Ensure play is called
           videoRef.current.onloadedmetadata = () => {
-            videoRef.current?.play();
-            if (requestRef.current) cancelAnimationFrame(requestRef.current);
-            lastTimeRef.current = performance.now();
-            requestRef.current = requestAnimationFrame(animate);
+            videoRef.current?.play().catch(e => console.error("Play error:", e));
+            if (!requestRef.current) {
+               lastTimeRef.current = performance.now();
+               requestRef.current = requestAnimationFrame(animate);
+            }
           };
         }
-      } catch (err) { console.error(err); }
+
+        // 3. Enjwumerate devices now that we have permissions
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const videoDevices = devices.filter(device => device.kind === 'videoinput');
+        setCameras(videoDevices);
+
+        // 4. Set selected camera based on active stream
+        const track = stream.getVideoTracks()[0];
+        const settings = track.getSettings();
+        if (settings.deviceId) {
+          setSelectedCamera(settings.deviceId);
+        } else if (videoDevices.length > 0) {
+          setSelectedCamera(videoDevices[0].deviceId);
+        }
+
+        setLoaded(true);
+
+      } catch (err) {
+        console.error("Initialization failed:", err);
+        alert(lang === 'CN' 
+          ? "无法启动相机，请确保允许访问摄像头权限。\n如果是iOS，请使用Safari浏览器。" 
+          : "Unable to start camera. Please ensure permissions are granted.\nUse Safari on iOS.");
+      }
     };
-    startStream();
-    return () => { if (requestRef.current) cancelAnimationFrame(requestRef.current); };
-  }, [selectedCamera]);
+
+    init();
+
+    return () => {
+      if (requestRef.current) cancelAnimationFrame(requestRef.current);
+      if (currentStreamRef.current) {
+        currentStreamRef.current.getTracks().forEach(t => t.stop());
+      }
+    };
+  }, []);
+
+  // Handle Camera Switching
+  useEffect(() => {
+    if (!loaded || !selectedCamera) return;
+
+    // Check if the selected camera is already running
+    const activeTrack = currentStreamRef.current?.getVideoTracks()[0];
+    if (activeTrack?.getSettings().deviceId === selectedCamera) return;
+
+    const switchCamera = async () => {
+      try {
+        if (currentStreamRef.current) {
+          currentStreamRef.current.getTracks().forEach(t => t.stop());
+        }
+
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { 
+            deviceId: { exact: selectedCamera }, 
+            width: { ideal: 1280 }, 
+            height: { ideal: 720 } 
+          }
+        });
+
+        currentStreamRef.current = stream;
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          videoRef.current.play().catch(e => console.error("Play error:", e));
+        }
+      } catch (err) {
+        console.error("Failed to switch camera:", err);
+      }
+    };
+
+    switchCamera();
+  }, [selectedCamera, loaded]);
 
   const mapCoordinates = (normX: number, normY: number, canvas: HTMLCanvasElement) => {
     return {
@@ -316,7 +383,9 @@ function App() {
   const animate = () => {
     const canvas = canvasRef.current;
     const video = videoRef.current;
-    if (!canvas || !video || video.videoWidth === 0) { 
+    
+    // Safety check for video readiness
+    if (!canvas || !video || video.readyState < 2) { 
       requestRef.current = requestAnimationFrame(animate); 
       return; 
     }
@@ -794,8 +863,8 @@ function App() {
         <video 
           ref={videoRef} 
           style={{ transform: `scaleX(-1)`, visibility: bgMode === BackgroundMode.Camera ? 'visible' : 'hidden' }}
-          className="absolute inset-0 w-full h-full object-fill opacity-100" 
-          playsInline muted 
+          className="absolute inset-0 w-full h-full object-cover" 
+          playsInline muted autoPlay
         />
         <canvas ref={canvasRef} className="absolute inset-0 w-full h-full transform scale-x-[-1] pointer-events-none" />
 
