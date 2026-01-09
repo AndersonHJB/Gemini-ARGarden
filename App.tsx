@@ -14,6 +14,18 @@ const PLANTING_COOLDOWN_MS = 250;
 const FIST_CLEAR_SECONDS = 2.0;      
 const FIST_GRACE_FRAMES = 12;
 const CAMERA_STORAGE_KEY = 'gemini_ar_garden_camera_id';
+const GARDEN_DATA_KEY = 'gemini_ar_garden_flowers_data';
+
+// Helper to load initial state safely
+const loadSavedFlowers = (): Flower[] => {
+  try {
+    const saved = localStorage.getItem(GARDEN_DATA_KEY);
+    return saved ? JSON.parse(saved) : [];
+  } catch (e) {
+    console.error("Failed to load saved garden:", e);
+    return [];
+  }
+};
 
 function App() {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -22,7 +34,8 @@ function App() {
   const currentStreamRef = useRef<MediaStream | null>(null);
   
   const seedsRef = useRef<Seed[]>([]);
-  const flowersRef = useRef<Flower[]>([]);
+  // Initialize with saved data
+  const flowersRef = useRef<Flower[]>(loadSavedFlowers());
   const particlesRef = useRef<Particle[]>([]);
   const lastResultsRef = useRef<any>(null);
   const lastTimeRef = useRef<number>(performance.now());
@@ -75,6 +88,18 @@ function App() {
   useEffect(() => { petalScaleRef.current = petalScale; }, [petalScale]);
   useEffect(() => { windStrengthRef.current = windStrength; }, [windStrength]);
   useEffect(() => { bgModeRef.current = bgMode; }, [bgMode]);
+
+  // Auto-Save Garden Data Periodically
+  useEffect(() => {
+    const saveInterval = setInterval(() => {
+      // Only save if we have flowers to save, to avoid unnecessary writes
+      if (flowersRef.current.length > 0) {
+        localStorage.setItem(GARDEN_DATA_KEY, JSON.stringify(flowersRef.current));
+      }
+    }, 2000); // Save every 2 seconds
+
+    return () => clearInterval(saveInterval);
+  }, []);
 
   // Initial Setup: Permissions -> Stream -> Vision -> Devices
   useEffect(() => {
@@ -390,6 +415,9 @@ function App() {
   };
 
   const handleClearGarden = useCallback(() => {
+    // Clear storage when clearing garden
+    localStorage.removeItem(GARDEN_DATA_KEY);
+    
     const canvas = canvasRef.current;
     if (!canvas) return;
     const width = canvas.width;
