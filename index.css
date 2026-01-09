@@ -2,21 +2,8 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Custom scrollbar for webkit */
-::-webkit-scrollbar {
-  width: 6px;
-}
-::-webkit-scrollbar-track {
-  background: #1f1f1f;
-}
-::-webkit-scrollbar-thumb {
-  background: #444;
-  border-radius: 3px;
-}
-
-body {
-  margin: 0;
-  overflow: hidden;
-  background-color: #000;
-  font-family: 'Inter', sans-serif;
-}
+/* 
+  Note: Core styles (body, scrollbar) are duplicated in index.html 
+  to ensure they load correctly in "Online Preview" environments 
+  that do not run the Vite build step.
+*/
