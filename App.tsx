@@ -13,6 +13,7 @@ const PLANTING_COOLDOWN_MS = 250;
 
 const FIST_CLEAR_SECONDS = 2.0;      
 const FIST_GRACE_FRAMES = 12;
+const CAMERA_STORAGE_KEY = 'gemini_ar_garden_camera_id';
 
 function App() {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -82,15 +83,34 @@ function App() {
         // 1. Initialize Vision Service (Heavy task)
         await visionService.initialize();
 
-        // 2. Request initial stream to trigger permissions (Default to user/front camera)
-        // Note: On iOS, we must get the stream BEFORE enumerating devices to get labels.
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { 
-            facingMode: 'user', 
-            width: { ideal: 1280 }, 
-            height: { ideal: 720 } 
+        // 2. Request initial stream. 
+        // We try to use the stored camera ID if available, otherwise default to user facing.
+        // Note: On iOS, this will still trigger a permission prompt on standard page loads.
+        const savedCameraId = localStorage.getItem(CAMERA_STORAGE_KEY);
+        let stream;
+
+        try {
+          if (savedCameraId) {
+             stream = await navigator.mediaDevices.getUserMedia({
+              video: { 
+                deviceId: { exact: savedCameraId },
+                width: { ideal: 1280 }, 
+                height: { ideal: 720 } 
+              }
+            });
+          } else {
+             throw new Error("No saved camera");
           }
-        });
+        } catch (e) {
+          // Fallback to default user facing if saved camera fails or doesn't exist
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: { 
+              facingMode: 'user', 
+              width: { ideal: 1280 }, 
+              height: { ideal: 720 } 
+            }
+          });
+        }
 
         currentStreamRef.current = stream;
         
@@ -125,7 +145,7 @@ function App() {
       } catch (err) {
         console.error("Initialization failed:", err);
         alert(lang === 'CN' 
-          ? "无法启动相机，请确保允许访问摄像头权限。\n如果是iOS，请使用Safari浏览器。" 
+          ? "无法启动相机，请确保允许访问摄像头权限。\n如果是iOS，请使用Safari浏览器并添加到主屏幕使用。" 
           : "Unable to start camera. Please ensure permissions are granted.\nUse Safari on iOS.");
       }
     };
@@ -140,9 +160,12 @@ function App() {
     };
   }, []);
 
-  // Handle Camera Switching
+  // Handle Camera Switching & Persistence
   useEffect(() => {
     if (!loaded || !selectedCamera) return;
+
+    // Save selection to storage
+    localStorage.setItem(CAMERA_STORAGE_KEY, selectedCamera);
 
     // Check if the selected camera is already running
     const activeTrack = currentStreamRef.current?.getVideoTracks()[0];

@@ -3,8 +3,9 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>Gemini AR Garden</title>
+    <link rel="manifest" href="/manifest.json" />
     
     <!-- Dual Mode Support: Tailwind CDN for Online Preview (No-Build environments) -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -38,6 +39,8 @@
         overflow: hidden;
         background-color: #000;
         font-family: 'Inter', sans-serif;
+        /* Prevent elastic scrolling on iOS */
+        overscroll-behavior: none;
       }
     </style>
 
