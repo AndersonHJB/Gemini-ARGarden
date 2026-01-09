@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { visionService } from './services/visionService';
 import { analyzeGarden, getRandomMessage } from './services/geminiService';
@@ -40,6 +39,7 @@ function App() {
   const growthHeightRef = useRef(1.0);
   const growthSpeedRef = useRef(1.0);
   const petalScaleRef = useRef(1.0);
+  const windStrengthRef = useRef(0.5);
   const bgModeRef = useRef<BackgroundMode>(BackgroundMode.Camera);
 
   const [loaded, setLoaded] = useState(false);
@@ -59,6 +59,7 @@ function App() {
   const [growthHeight, setGrowthHeightState] = useState(1.0);
   const [growthSpeed, setGrowthSpeedState] = useState(1.0);
   const [petalScale, setPetalScaleState] = useState(1.0);
+  const [windStrength, setWindStrengthState] = useState(0.5);
   const [bgMode, setBgMode] = useState<BackgroundMode>(BackgroundMode.Camera);
 
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -70,6 +71,7 @@ function App() {
   useEffect(() => { growthHeightRef.current = growthHeight; }, [growthHeight]);
   useEffect(() => { growthSpeedRef.current = growthSpeed; }, [growthSpeed]);
   useEffect(() => { petalScaleRef.current = petalScale; }, [petalScale]);
+  useEffect(() => { windStrengthRef.current = windStrength; }, [windStrength]);
   useEffect(() => { bgModeRef.current = bgMode; }, [bgMode]);
 
   useEffect(() => {
@@ -489,6 +491,16 @@ function App() {
       drawSeed(ctx, x, y);
       return;
     }
+
+    // Wind Logic
+    const time = performance.now();
+    const windStr = windStrengthRef.current;
+    // Unique phase for each flower based on x and id
+    const uniqueOffset = x * 0.01 + (f.id.charCodeAt(0) || 0);
+    // Sway amplitude scales with height (taller flowers sway more) and wind strength
+    const swayAmp = 20 * windStr * (f.currentHeight / 150); 
+    const sway = Math.sin(time * 0.002 + uniqueOffset) * swayAmp;
+
     ctx.save();
     ctx.translate(x, y);
     const moundWidth = 24 + (f.currentHeight / f.maxHeight) * 12;
@@ -504,12 +516,15 @@ function App() {
     const h = displayHeight;
     ctx.beginPath(); 
     ctx.moveTo(0, 0);
-    const cp1x = f.stemControlPoints[1].x;
+
+    // Apply sway to the stem control points
+    const cp1x = f.stemControlPoints[1].x + sway * 0.25;
     const cp1y = -h * 0.33;
-    const cp2x = f.stemControlPoints[2].x;
+    const cp2x = f.stemControlPoints[2].x + sway * 0.5;
     const cp2y = -h * 0.66;
-    const tipX = f.stemControlPoints[3].x;
+    const tipX = f.stemControlPoints[3].x + sway;
     const tipY = -h;
+
     ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, tipX, tipY);
     ctx.lineWidth = 4 + (f.currentHeight / 180);
     ctx.strokeStyle = '#2E7D32';
@@ -520,12 +535,15 @@ function App() {
       const leafCount = Math.floor(h / 80);
       for (let i = 0; i < leafCount; i++) {
         const t = Math.min(0.85, Math.max(0.15, (i + 0.5) / (leafCount + 0.5)));
+        // Recalculate position on the swayed curve
         const px = (1-t)**3 * 0 + 3*(1-t)**2*t * cp1x + 3*(1-t)*t**2 * cp2x + t**3 * tipX;
         const py = (1-t)**3 * 0 + 3*(1-t)**2*t * cp1y + 3*(1-t)*t**2 * cp2y + t**3 * tipY;
         const isRight = (i + Math.floor(f.relX * 10)) % 2 === 0;
         ctx.save();
         ctx.translate(px, py);
         ctx.rotate(isRight ? 0.7 : -0.7);
+        // Add a little wind sway to the leaves too
+        ctx.rotate(Math.sin(time * 0.003 + uniqueOffset) * 0.2 * windStr);
         ctx.fillStyle = '#388E3C';
         ctx.beginPath();
         ctx.ellipse(isRight ? 8 : -8, 0, 12, 5, 0, 0, Math.PI * 2);
@@ -541,6 +559,9 @@ function App() {
     
     if (f.bloomProgress > 0) {
       ctx.translate(tipX, tipY);
+      // Rotate flower head slightly with wind
+      ctx.rotate(sway * 0.015);
+
       const scale = (f.maxHeight / 220) * growthHeightRef.current * petalScaleRef.current * Math.min(1.0, f.bloomProgress);
       ctx.scale(Math.max(0.01, scale), Math.max(0.01, scale));
       ctx.shadowBlur = 15;
@@ -788,6 +809,7 @@ function App() {
           growthHeight={growthHeight} setGrowthHeight={setGrowthHeightState}
           growthSpeed={growthSpeed} setGrowthSpeed={setGrowthSpeedState}
           petalScale={petalScale} setPetalScale={setPetalScaleState}
+          windStrength={windStrength} setWindStrength={setWindStrengthState}
           cameras={cameras} selectedCamera={selectedCamera} setSelectedCamera={setSelectedCamera}
           bgMode={bgMode} setBgMode={setBgMode}
           onCapture={handleCapture}

@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { BiomeTheme, BIOME_COLORS, FlowerSpecies, BackgroundMode } from '../types';
 import { twMerge } from 'tailwind-merge';
@@ -27,6 +26,8 @@ interface WorldControlsProps {
   setGrowthSpeed: (s: number) => void;
   petalScale: number;
   setPetalScale: (s: number) => void;
+  windStrength: number;
+  setWindStrength: (w: number) => void;
   cameras: MediaDeviceInfo[];
   selectedCamera: string;
   setSelectedCamera: (id: string) => void;
@@ -49,6 +50,7 @@ const UI_STRINGS = {
     GROWTH_SCALE: "世界生长比例",
     GROWTH_SPEED: "生长活力",
     PETAL_SIZE: "花瓣规模",
+    WIND: "微风轻拂",
     PERSPECTIVE: "视角",
     AR_VIEW: "增强现实",
     ARTISTIC: "艺术视图",
@@ -69,6 +71,7 @@ const UI_STRINGS = {
     GROWTH_SCALE: "World Growth Scale",
     GROWTH_SPEED: "Growth Vigor",
     PETAL_SIZE: "Petal Scale",
+    WIND: "Breeze Intensity",
     PERSPECTIVE: "Perspective",
     AR_VIEW: "AR VIEW",
     ARTISTIC: "ARTISTIC",
@@ -142,6 +145,7 @@ const ControlSlider = ({ label, value, min, max, step, onChange, unit = "" }: an
 export const WorldControls: React.FC<WorldControlsProps> = ({
   isOpen, setIsOpen, biome, setBiome, onApplyBiomeToAll, species, setSpecies, onApplySpeciesToAll, 
   growthHeight, setGrowthHeight, growthSpeed, setGrowthSpeed, petalScale, setPetalScale,
+  windStrength, setWindStrength,
   cameras, selectedCamera, setSelectedCamera, bgMode, setBgMode, 
   onCapture, onClearGarden, lang, setLang
 }) => {
@@ -220,6 +224,7 @@ export const WorldControls: React.FC<WorldControlsProps> = ({
           <ControlSlider label={t.GROWTH_SCALE} value={growthHeight} min={0.2} max={1.8} step={0.01} onChange={setGrowthHeight} unit="%" />
           <ControlSlider label={t.GROWTH_SPEED} value={growthSpeed} min={0.2} max={2.0} step={0.1} onChange={setGrowthSpeed} unit="x" />
           <ControlSlider label={t.PETAL_SIZE} value={petalScale} min={0.5} max={1.5} step={0.05} onChange={setPetalScale} unit="x" />
+          <ControlSlider label={t.WIND} value={windStrength} min={0} max={3.0} step={0.1} onChange={setWindStrength} unit="" />
         </div>
 
         <div className="mb-6">
@@ -246,7 +251,7 @@ export const WorldControls: React.FC<WorldControlsProps> = ({
           </div>
         </div>
 
-        <div className="mb-6 bg-white/5 p-4 rounded-2xl border border-white/5">
+        <div className="mb-6 bg-white/5 p-4 rounded-2xl border border-white/5 mb-6">
           <div className="flex justify-between items-center mb-4">
             <label className="text-[10px] text-gray-400 uppercase font-bold tracking-wider block">{t.BIOME_DNA}</label>
             <button 
