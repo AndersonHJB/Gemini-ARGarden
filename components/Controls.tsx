@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { BiomeTheme, BIOME_COLORS, FlowerSpecies, BackgroundMode } from '../types';
 import { twMerge } from 'tailwind-merge';
 import { MdCameraAlt, MdBrush, MdVideocam, MdSettings, MdClose, MdDeleteSweep, MdLanguage } from "react-icons/md";
@@ -59,7 +59,8 @@ const UI_STRINGS = {
     SPECIES: "花卉品种",
     CONVERT: "转换全部",
     HARDWARE: "硬件输出",
-    LANGUAGE: "语言 (Language)"
+    LANGUAGE: "语言 (Language)",
+    VISITS: "累计访问"
   },
   EN: {
     PINCH: "PINCH: PLANT",
@@ -80,7 +81,8 @@ const UI_STRINGS = {
     SPECIES: "Flower Species",
     CONVERT: "CONVERT ALL",
     HARDWARE: "Hardware Output",
-    LANGUAGE: "Language (语言)"
+    LANGUAGE: "Language (语言)",
+    VISITS: "TOTAL VISITS"
   }
 };
 
@@ -150,6 +152,26 @@ export const WorldControls: React.FC<WorldControlsProps> = ({
   onCapture, onClearGarden, lang, setLang
 }) => {
   const t = UI_STRINGS[lang];
+  const [visitCount, setVisitCount] = useState<number | null>(null);
+
+  useEffect(() => {
+    const updateCount = (data: any) => {
+      if (data && typeof data.total === 'number') {
+        setVisitCount(data.total);
+      }
+    };
+
+    // Check if script is already loaded and data is available via API
+    if (window.BFTCounter) {
+      window.BFTCounter.get().then(updateCount).catch(() => {});
+    }
+
+    // Listen for events from the script
+    const handleUpdate = (e: any) => updateCount(e.detail);
+    window.addEventListener('bftcounter:update', handleUpdate);
+    return () => window.removeEventListener('bftcounter:update', handleUpdate);
+  }, []);
+
   return (
     <>
       {!isOpen && (
@@ -318,6 +340,11 @@ export const WorldControls: React.FC<WorldControlsProps> = ({
               <option key={cam.deviceId} value={cam.deviceId}>{cam.label || `Lens ${cam.deviceId.slice(0,4)}`}</option>
             ))}
           </select>
+          
+          <div className="mt-6 pt-4 border-t border-white/5 flex justify-between items-center text-[9px] text-gray-500 font-mono">
+             <span className="tracking-widest">{t.VISITS}</span>
+             <span className="text-pink-400">{visitCount !== null ? visitCount.toLocaleString() : '...'}</span>
+          </div>
         </div>
       </div>
     </>

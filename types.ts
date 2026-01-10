@@ -1,4 +1,5 @@
 
+
 export interface Point {
   x: number;
   y: number;
@@ -103,3 +104,12 @@ export const ARTISTIC_BG: Record<BiomeTheme, ArtisticConfig> = {
     showHills: true
   }
 };
+
+declare global {
+  interface Window {
+    BFTCounter?: {
+      get: () => Promise<any>;
+      on: (fn: (data: any) => void) => () => void;
+    };
+  }
+}
