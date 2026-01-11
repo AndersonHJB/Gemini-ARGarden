@@ -3,7 +3,7 @@ import { visionService } from './services/visionService';
 import { analyzeGarden, getRandomMessage } from './services/geminiService';
 import { StatusPanel, WorldControls } from './components/Controls';
 import { BiomeTheme, BIOME_COLORS, Flower, FlowerSpecies, Point, Seed, Particle, BackgroundMode, ARTISTIC_BG } from './types';
-import { MdAutoAwesome, MdDownload, MdClose } from "react-icons/md";
+import { MdAutoAwesome, MdDownload, MdClose, MdCheck } from "react-icons/md";
 
 // Refined detection constants for high responsiveness
 const PINCH_THRESHOLD_START = 0.045; 
@@ -15,6 +15,14 @@ const FIST_CLEAR_SECONDS = 2.0;
 const FIST_GRACE_FRAMES = 12;
 const CAMERA_STORAGE_KEY = 'gemini_ar_garden_camera_id';
 const GARDEN_DATA_KEY = 'gemini_ar_garden_flowers_data';
+
+// Frame Styles Configuration - "ONE" Style
+const FRAME_STYLES = [
+  { id: 'classic', name: '经典', bg: '#ffffff', text: '#444444', sub: '#888888', accent: '#000000', shadow: 'rgba(0,0,0,0.1)' },
+  { id: 'warm', name: '暖阳', bg: '#f4f0e6', text: '#5d5550', sub: '#98908a', accent: '#8c7b75', shadow: 'rgba(93,85,80,0.1)' },
+  { id: 'dark', name: '午夜', bg: '#1a1a1a', text: '#cccccc', sub: '#666666', accent: '#ffffff', shadow: 'rgba(0,0,0,0.5)' },
+  { id: 'cool', name: '冷调', bg: '#eceff1', text: '#37474f', sub: '#90a4ae', accent: '#455a64', shadow: 'rgba(55,71,79,0.1)' }
+];
 
 // Helper to load initial state safely
 const loadSavedFlowers = (): Flower[] => {
@@ -79,7 +87,11 @@ function App() {
 
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<string | null>(null);
-  const [capturedImage, setCapturedImage] = useState<string | null>(null);
+  
+  // Capture Logic States
+  const [rawCapture, setRawCapture] = useState<HTMLCanvasElement | null>(null);
+  const [capturedCard, setCapturedCard] = useState<string | null>(null);
+  const [activeFrameId, setActiveFrameId] = useState<string>('classic');
 
   useEffect(() => { biomeRef.current = biome; }, [biome]);
   useEffect(() => { speciesRef.current = species; }, [species]);
@@ -92,11 +104,10 @@ function App() {
   // Auto-Save Garden Data Periodically
   useEffect(() => {
     const saveInterval = setInterval(() => {
-      // Only save if we have flowers to save, to avoid unnecessary writes
       if (flowersRef.current.length > 0) {
         localStorage.setItem(GARDEN_DATA_KEY, JSON.stringify(flowersRef.current));
       }
-    }, 2000); // Save every 2 seconds
+    }, 2000); 
 
     return () => clearInterval(saveInterval);
   }, []);
@@ -105,12 +116,8 @@ function App() {
   useEffect(() => {
     const init = async () => {
       try {
-        // 1. Initialize Vision Service (Heavy task)
         await visionService.initialize();
 
-        // 2. Request initial stream. 
-        // We try to use the stored camera ID if available, otherwise default to user facing.
-        // Note: On iOS, this will still trigger a permission prompt on standard page loads.
         const savedCameraId = localStorage.getItem(CAMERA_STORAGE_KEY);
         let stream;
 
@@ -127,7 +134,6 @@ function App() {
              throw new Error("No saved camera");
           }
         } catch (e) {
-          // Fallback to default user facing if saved camera fails or doesn't exist
           stream = await navigator.mediaDevices.getUserMedia({
             video: { 
               facingMode: 'user', 
@@ -141,7 +147,6 @@ function App() {
         
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
-          // Ensure play is called
           videoRef.current.onloadedmetadata = () => {
             videoRef.current?.play().catch(e => console.error("Play error:", e));
             if (!requestRef.current) {
@@ -151,12 +156,10 @@ function App() {
           };
         }
 
-        // 3. Enjwumerate devices now that we have permissions
         const devices = await navigator.mediaDevices.enumerateDevices();
         const videoDevices = devices.filter(device => device.kind === 'videoinput');
         setCameras(videoDevices);
 
-        // 4. Set selected camera based on active stream
         const track = stream.getVideoTracks()[0];
         const settings = track.getSettings();
         if (settings.deviceId) {
@@ -188,11 +191,7 @@ function App() {
   // Handle Camera Switching & Persistence
   useEffect(() => {
     if (!loaded || !selectedCamera) return;
-
-    // Save selection to storage
     localStorage.setItem(CAMERA_STORAGE_KEY, selectedCamera);
-
-    // Check if the selected camera is already running
     const activeTrack = currentStreamRef.current?.getVideoTracks()[0];
     if (activeTrack?.getSettings().deviceId === selectedCamera) return;
 
@@ -201,7 +200,6 @@ function App() {
         if (currentStreamRef.current) {
           currentStreamRef.current.getTracks().forEach(t => t.stop());
         }
-
         const stream = await navigator.mediaDevices.getUserMedia({
           video: { 
             deviceId: { exact: selectedCamera }, 
@@ -209,7 +207,6 @@ function App() {
             height: { ideal: 720 } 
           }
         });
-
         currentStreamRef.current = stream;
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
@@ -219,7 +216,6 @@ function App() {
         console.error("Failed to switch camera:", err);
       }
     };
-
     switchCamera();
   }, [selectedCamera, loaded]);
 
@@ -415,7 +411,6 @@ function App() {
   };
 
   const handleClearGarden = useCallback(() => {
-    // Clear storage when clearing garden
     localStorage.removeItem(GARDEN_DATA_KEY);
     
     const canvas = canvasRef.current;
@@ -435,7 +430,6 @@ function App() {
     const canvas = canvasRef.current;
     const video = videoRef.current;
     
-    // Safety check for video readiness
     if (!canvas || !video || video.readyState < 2) { 
       requestRef.current = requestAnimationFrame(animate); 
       return; 
@@ -612,12 +606,9 @@ function App() {
       return;
     }
 
-    // Wind Logic
     const time = performance.now();
     const windStr = windStrengthRef.current;
-    // Unique phase for each flower based on x and id
     const uniqueOffset = x * 0.01 + (f.id.charCodeAt(0) || 0);
-    // Sway amplitude scales with height (taller flowers sway more) and wind strength
     const swayAmp = 20 * windStr * (f.currentHeight / 150); 
     const sway = Math.sin(time * 0.002 + uniqueOffset) * swayAmp;
 
@@ -637,7 +628,6 @@ function App() {
     ctx.beginPath(); 
     ctx.moveTo(0, 0);
 
-    // Apply sway to the stem control points
     const cp1x = f.stemControlPoints[1].x + sway * 0.25;
     const cp1y = -h * 0.33;
     const cp2x = f.stemControlPoints[2].x + sway * 0.5;
@@ -655,14 +645,12 @@ function App() {
       const leafCount = Math.floor(h / 80);
       for (let i = 0; i < leafCount; i++) {
         const t = Math.min(0.85, Math.max(0.15, (i + 0.5) / (leafCount + 0.5)));
-        // Recalculate position on the swayed curve
         const px = (1-t)**3 * 0 + 3*(1-t)**2*t * cp1x + 3*(1-t)*t**2 * cp2x + t**3 * tipX;
         const py = (1-t)**3 * 0 + 3*(1-t)**2*t * cp1y + 3*(1-t)*t**2 * cp2y + t**3 * tipY;
         const isRight = (i + Math.floor(f.relX * 10)) % 2 === 0;
         ctx.save();
         ctx.translate(px, py);
         ctx.rotate(isRight ? 0.7 : -0.7);
-        // Add a little wind sway to the leaves too
         ctx.rotate(Math.sin(time * 0.003 + uniqueOffset) * 0.2 * windStr);
         ctx.fillStyle = '#388E3C';
         ctx.beginPath();
@@ -679,7 +667,6 @@ function App() {
     
     if (f.bloomProgress > 0) {
       ctx.translate(tipX, tipY);
-      // Rotate flower head slightly with wind
       ctx.rotate(sway * 0.015);
 
       const scale = (f.maxHeight / 220) * growthHeightRef.current * petalScaleRef.current * Math.min(1.0, f.bloomProgress);
@@ -831,78 +818,192 @@ function App() {
     setIsAnalyzing(false);
   }, [lang]);
 
+  // 1. Capture the raw scene first (no text overlay)
   const handleCapture = useCallback(() => {
     const canvas = canvasRef.current;
     const video = videoRef.current;
     if (!canvas || !video) return;
 
-    const tempCanvas = document.createElement('canvas');
-    tempCanvas.width = canvas.width;
-    tempCanvas.height = canvas.height;
-    const tctx = tempCanvas.getContext('2d');
-    if (!tctx) return;
+    const sceneCanvas = document.createElement('canvas');
+    sceneCanvas.width = canvas.width;
+    sceneCanvas.height = canvas.height;
+    const sCtx = sceneCanvas.getContext('2d');
+    if (!sCtx) return;
 
+    // Draw Video & AR layers
     if (bgMode === BackgroundMode.Camera) {
-      tctx.save(); 
-      tctx.scale(-1, 1); 
-      tctx.drawImage(video, -tempCanvas.width, 0, tempCanvas.width, tempCanvas.height); 
-      tctx.restore();
+      sCtx.save();
+      sCtx.scale(-1, 1);
+      sCtx.drawImage(video, -sceneCanvas.width, 0, sceneCanvas.width, sceneCanvas.height);
+      sCtx.restore();
     } else {
-      drawArtisticBackground(tctx, tempCanvas.width, tempCanvas.height, biome);
+      drawArtisticBackground(sCtx, sceneCanvas.width, sceneCanvas.height, biome);
     }
+    sCtx.save();
+    sCtx.scale(-1, 1);
+    sCtx.drawImage(canvas, -sceneCanvas.width, 0, sceneCanvas.width, sceneCanvas.height);
+    sCtx.restore();
 
-    tctx.save(); 
-    tctx.scale(-1, 1); 
-    tctx.drawImage(canvas, -tempCanvas.width, 0, tempCanvas.width, tempCanvas.height); 
-    tctx.restore();
+    setRawCapture(sceneCanvas);
+    setActiveFrameId('classic');
+  }, [bgMode, biome]);
 
-    // Add Reflection Overlay
-    const reflection = getRandomMessage(lang);
-    tctx.save();
-    
-    // Bottom Gradient Overlay for text readability
-    const gradHeight = 160;
-    const textGrad = tctx.createLinearGradient(0, tempCanvas.height - gradHeight, 0, tempCanvas.height);
-    textGrad.addColorStop(0, 'transparent');
-    textGrad.addColorStop(1, 'rgba(0,0,0,0.8)');
-    tctx.fillStyle = textGrad;
-    tctx.fillRect(0, tempCanvas.height - gradHeight, tempCanvas.width, gradHeight);
+  // 2. Effect to generate the framed card
+  useEffect(() => {
+    if (!rawCapture) return;
 
-    // Text Rendering
-    tctx.fillStyle = 'white';
-    tctx.shadowColor = 'black';
-    tctx.shadowBlur = 10;
-    tctx.textAlign = 'center';
-    tctx.font = 'italic 600 24px "Inter", sans-serif';
-    
-    // Wrapping text if needed
-    let y = tempCanvas.height - 70;
-    tctx.fillText(`"${reflection}"`, tempCanvas.width / 2, y);
+    const generateCard = async () => {
+        const frameStyle = FRAME_STYLES.find(f => f.id === activeFrameId) || FRAME_STYLES[0];
+        const CARD_WIDTH = 1080;
+        const SIDE_MARGIN = 60;
+        
+        // Calculate image dimensions to fit within width but maintain aspect ratio
+        const sceneAspect = rawCapture.width / rawCapture.height;
+        const imgWidth = CARD_WIDTH - (SIDE_MARGIN * 2);
+        const imgHeight = imgWidth / sceneAspect;
 
-    // App Branding
-    tctx.globalAlpha = 0.7;
-    tctx.font = 'bold 13px "Inter", sans-serif';
-    tctx.textAlign = 'right';
-    tctx.fillText('指尖上的灵动花园｜源自：Bornforthis AI实验室', tempCanvas.width - 40, tempCanvas.height - 30);
-    
-    tctx.restore();
+        // Heights
+        const headerHeight = 160;
+        // Estimate footer space dynamically or fixed
+        
+        // Content
+        const reflection = getRandomMessage('CN'); // Force CN for share card as requested
+        const now = new Date();
+        const dayStr = now.getDate().toString();
+        const monthYearStr = now.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }).toUpperCase();
+        
+        // Measure text
+        const tempCtx = document.createElement('canvas').getContext('2d');
+        if (!tempCtx) return;
+        const quoteSize = 36;
+        tempCtx.font = `normal ${quoteSize}px "Inter", sans-serif`;
+        const maxTextWidth = CARD_WIDTH - (SIDE_MARGIN * 4);
+        
+        // Wrapping Logic
+        const getLines = (ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D, text: string, maxWidth: number) => {
+            const lines = [];
+            let currentLine = '';
+            for(let i=0; i<text.length; i++) {
+                const char = text[i];
+                const test = currentLine + char;
+                if (ctx.measureText(test).width > maxWidth) {
+                    lines.push(currentLine);
+                    currentLine = char;
+                } else {
+                    currentLine = test;
+                }
+            }
+            lines.push(currentLine);
+            return lines;
+        };
 
-    setCapturedImage(tempCanvas.toDataURL('image/png'));
-  }, [bgMode, biome, lang]);
+        const lines = getLines(tempCtx, reflection, maxTextWidth);
+        const lineHeight = quoteSize * 1.8;
+        const textBlockHeight = lines.length * lineHeight;
+        const footerHeight = textBlockHeight + 240; // Space for logo and attribution
+
+        const CARD_HEIGHT = headerHeight + imgHeight + footerHeight;
+
+        const cardCanvas = document.createElement('canvas');
+        cardCanvas.width = CARD_WIDTH;
+        cardCanvas.height = CARD_HEIGHT;
+        const ctx = cardCanvas.getContext('2d');
+        if (!ctx) return;
+
+        // 1. Background
+        ctx.fillStyle = frameStyle.bg;
+        ctx.fillRect(0, 0, CARD_WIDTH, CARD_HEIGHT);
+
+        // 2. Header
+        ctx.fillStyle = frameStyle.accent;
+        ctx.font = 'bold 100px "Inter", sans-serif';
+        ctx.textBaseline = 'top';
+        ctx.fillText(dayStr, SIDE_MARGIN, 50);
+        
+        const dayWidth = ctx.measureText(dayStr).width;
+        ctx.fillStyle = frameStyle.text;
+        ctx.font = 'bold 32px "Inter", sans-serif';
+        ctx.fillText(monthYearStr, SIDE_MARGIN + dayWidth + 20, 65);
+        
+        // Location / Context
+        ctx.textAlign = 'right';
+        ctx.fillStyle = frameStyle.sub;
+        ctx.font = 'normal 26px "Inter", sans-serif';
+        ctx.fillText('数字花园 · AR空间', CARD_WIDTH - SIDE_MARGIN, 70);
+
+        // 3. Image with Shadow
+        const imgX = SIDE_MARGIN;
+        const imgY = headerHeight;
+
+        ctx.save();
+        ctx.shadowColor = frameStyle.shadow || 'rgba(0,0,0,0.1)';
+        ctx.shadowBlur = 30;
+        ctx.shadowOffsetY = 15;
+        ctx.fillStyle = '#000'; // Shadow caster
+        ctx.fillRect(imgX, imgY, imgWidth, imgHeight);
+        ctx.restore();
+
+        ctx.drawImage(rawCapture, imgX, imgY, imgWidth, imgHeight);
+
+        // 4. Footer Content
+        const textStartY = imgY + imgHeight + 100;
+        ctx.textAlign = 'center';
+        
+        // Attribution
+        ctx.fillStyle = frameStyle.sub;
+        ctx.font = 'normal 24px "Inter", sans-serif';
+        ctx.fillText('Garden Created by You', CARD_WIDTH / 2, textStartY - 50);
+
+        // Divider Line (Optional)
+        ctx.beginPath();
+        ctx.moveTo(CARD_WIDTH / 2 - 30, textStartY - 25);
+        ctx.lineTo(CARD_WIDTH / 2 + 30, textStartY - 25);
+        ctx.strokeStyle = frameStyle.sub;
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        // Quote
+        ctx.fillStyle = frameStyle.text;
+        ctx.font = `normal ${quoteSize}px "Inter", sans-serif`;
+        lines.forEach((line, i) => {
+           ctx.fillText(line, CARD_WIDTH / 2, textStartY + (i * lineHeight));
+        });
+
+        // Branding
+        const brandY = CARD_HEIGHT - 70;
+        ctx.fillStyle = frameStyle.accent;
+        ctx.font = 'bold 32px "Inter", sans-serif';
+        ctx.fillText('GEMINI AR GARDEN', CARD_WIDTH / 2, brandY - 40);
+        
+        ctx.fillStyle = frameStyle.sub;
+        ctx.font = 'normal 16px "Inter", sans-serif';
+        ctx.letterSpacing = '4px';
+        ctx.fillText('BORNFORTHIS AI LAB', CARD_WIDTH / 2, brandY);
+
+        setCapturedCard(cardCanvas.toDataURL('image/png'));
+    };
+
+    generateCard();
+  }, [rawCapture, activeFrameId, lang]);
 
   const downloadCapturedImage = () => {
-    if (!capturedImage) return;
+    if (!capturedCard) return;
     const link = document.createElement('a');
-    link.href = capturedImage;
+    link.href = capturedCard;
     link.download = `ar-garden-${Date.now()}.png`;
     link.click();
+  };
+
+  const closeCapture = () => {
+      setCapturedCard(null);
+      setRawCapture(null);
   };
 
   const reflectionsBtnText = lang === 'CN' ? "花园感悟" : "GARDEN REFLECTIONS";
   const reflectionsLoadingText = lang === 'CN' ? "正在感悟生命..." : "CONSULTING SPIRITS...";
   const reflectionsCloseText = lang === 'CN' ? "关闭感悟" : "CLOSE VISION";
   const capturedMemoryText = lang === 'CN' ? "记忆已定格" : "MEMORY CAPTURED";
-  const downloadBtnText = lang === 'CN' ? "下载图片" : "DOWNLOAD";
+  const downloadBtnText = lang === 'CN' ? "保存卡片" : "SAVE CARD";
   const exitBtnText = lang === 'CN' ? "返回" : "EXIT";
 
   return (
@@ -955,26 +1056,48 @@ function App() {
           </div>
         )}
 
-        {capturedImage && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/95 backdrop-blur-2xl z-50 p-4" onClick={(e) => e.stopPropagation()}>
-             <div className="bg-white/5 p-4 rounded-[2.5rem] max-w-2xl w-full border border-white/10 shadow-2xl flex flex-col items-center">
-                <div className="flex justify-between w-full mb-4 px-4">
-                   <h3 className="text-[10px] font-black tracking-[0.3em] text-pink-400 uppercase">{capturedMemoryText}</h3>
-                   <button onClick={() => setCapturedImage(null)} className="text-white hover:text-pink-400 transition-colors">
-                      <MdClose className="text-2xl" />
-                   </button>
-                </div>
-                <div className="relative w-full rounded-[2rem] overflow-hidden border border-white/10 mb-6 bg-black">
-                   <img src={capturedImage} alt="Captured Garden" className="w-full h-auto block" />
-                </div>
-                <div className="flex gap-4 w-full">
-                  <button onClick={downloadCapturedImage} className="flex-1 flex items-center justify-center gap-3 py-5 bg-white text-black rounded-2xl font-black text-[10px] tracking-widest uppercase hover:bg-pink-500 hover:text-white transition-all">
-                    <MdDownload className="text-xl" /> {downloadBtnText}
+        {/* Capture Preview Modal */}
+        {capturedCard && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/95 backdrop-blur-3xl z-50 p-6 pb-12" onClick={(e) => e.stopPropagation()}>
+             <div className="flex justify-between w-full max-w-lg mb-4 px-2 shrink-0">
+                <h3 className="text-[12px] font-black tracking-[0.3em] text-white/50 uppercase">{capturedMemoryText}</h3>
+                <button onClick={closeCapture} className="text-white/50 hover:text-white transition-colors">
+                   <MdClose className="text-2xl" />
+                </button>
+             </div>
+             
+             {/* Preview Container - Scrollable if needed, but mostly fitted */}
+             <div className="relative w-full max-w-lg flex-1 min-h-0 flex items-center justify-center mb-6">
+                <img 
+                   src={capturedCard} 
+                   alt="Captured Garden" 
+                   className="max-w-full max-h-full object-contain rounded-sm shadow-2xl"
+                   style={{ boxShadow: '0 0 50px rgba(0,0,0,0.5)' }} 
+                />
+             </div>
+
+             {/* Frame Selector */}
+             <div className="flex gap-4 mb-6 shrink-0 overflow-x-auto max-w-full pb-2 px-2 mask-linear">
+                {FRAME_STYLES.map(style => (
+                  <button
+                    key={style.id}
+                    onClick={() => setActiveFrameId(style.id)}
+                    className={`w-12 h-12 rounded-full border-2 flex items-center justify-center transition-all shrink-0 ${activeFrameId === style.id ? 'border-white scale-110 shadow-lg' : 'border-white/20 opacity-60 hover:opacity-100'}`}
+                    style={{ backgroundColor: style.bg }}
+                    title={style.name}
+                  >
+                    {activeFrameId === style.id && <MdCheck className={`text-xl ${style.id === 'dark' ? 'text-white' : 'text-black'}`} />}
                   </button>
-                  <button onClick={() => setCapturedImage(null)} className="px-8 py-5 bg-white/5 text-white border border-white/10 rounded-2xl font-black text-[10px] tracking-widest uppercase hover:bg-white/10 transition-all">
-                    {exitBtnText}
-                  </button>
-                </div>
+                ))}
+             </div>
+
+             <div className="flex gap-4 w-full max-w-lg shrink-0">
+               <button onClick={downloadCapturedImage} className="flex-1 flex items-center justify-center gap-3 py-4 bg-white text-black rounded-xl font-bold text-[11px] tracking-widest uppercase hover:bg-gray-200 transition-all shadow-lg shadow-white/10">
+                 <MdDownload className="text-lg" /> {downloadBtnText}
+               </button>
+               <button onClick={closeCapture} className="px-8 py-4 bg-white/10 text-white rounded-xl font-bold text-[11px] tracking-widest uppercase hover:bg-white/20 transition-all">
+                 {exitBtnText}
+               </button>
              </div>
           </div>
         )}
