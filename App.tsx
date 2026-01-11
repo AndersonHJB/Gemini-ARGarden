@@ -3,7 +3,7 @@ import { visionService } from './services/visionService';
 import { analyzeGarden, getRandomMessage } from './services/geminiService';
 import { StatusPanel, WorldControls } from './components/Controls';
 import { BiomeTheme, BIOME_COLORS, Flower, FlowerSpecies, Point, Seed, Particle, BackgroundMode, ARTISTIC_BG } from './types';
-import { MdAutoAwesome, MdDownload, MdClose, MdCheck } from "react-icons/md";
+import {MdAutoAwesome, MdDownload, MdClose, MdCheck} from "react-icons/md";
 
 // Refined detection constants for high responsiveness
 const PINCH_THRESHOLD_START = 0.045; 
@@ -1079,11 +1079,32 @@ function App() {
           lang={lang} setLang={setLang}
         />
 
-        <div className="absolute bottom-8 right-8 z-20 w-72">
-          <button onClick={(e) => { e.stopPropagation(); handleAnalyze(); }} disabled={isAnalyzing}
-            className="w-full group flex items-center justify-center gap-4 bg-white/10 hover:bg-white/20 backdrop-blur-2xl border border-white/20 text-white py-4 rounded-2xl font-bold shadow-2xl transition-all active:scale-95 disabled:opacity-50">
-            <MdAutoAwesome className={`text-xl text-pink-400 ${isAnalyzing ? "animate-spin" : "group-hover:rotate-12"}`} />
-            <span className="tracking-[0.2em] text-[10px] uppercase font-black">{isAnalyzing ? reflectionsLoadingText : reflectionsBtnText}</span>
+        {/* Updated "Garden Reflections" Button for Mobile Responsiveness */}
+        <div className="absolute bottom-6 right-6 sm:bottom-8 sm:right-8 z-20 flex flex-col items-end pointer-events-none">
+          <button 
+            onClick={(e) => { e.stopPropagation(); handleAnalyze(); }} 
+            disabled={isAnalyzing}
+            className={`
+              pointer-events-auto
+              relative groupqp flex items-center justify-center 
+              bg-black/60 backdrop-blur-xl border border-white/10 text-white 
+              shadow-2xl transition-all duration-300 ease-out
+              active:scale-95 disabled:opacity-50
+              hover:bg-white/10 hover:border-white/30 hover:shadow-[0_0_20px_rgba(236,72,153,0.3)]
+              ${isAnalyzing 
+                ? 'px-6 py-3 rounded-2xl gap-3 w-auto' // Loading state: expanded pill
+                : 'w-14 h-14 rounded-full sm:w-auto sm:h-auto sm:px-6 sm:py-3 sm:rounded-2xl sm:gap-3' // Default: Circle on mobile, Pill on desktop
+              }
+            `}
+          >
+            <MdAutoAwesome className={`text-xl text-pink-400 shrink-0 ${isAnalyzing ? "animate-spin" : "group-hover:rotate-12 transition-transform"}`} />
+            
+            <span className={`
+              font-bold text-[10px] tracking-[0.2em] uppercase whitespace-nowrap
+              ${isAnalyzing ? 'block' : 'hidden sm:block'}
+            `}>
+              {isAnalyzing ? reflectionsLoadingText : reflectionsBtnText}
+            </span>
           </button>
         </div>
 
