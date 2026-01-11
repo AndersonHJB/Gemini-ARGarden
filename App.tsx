@@ -838,89 +838,52 @@ function App() {
     setIsAnalyzing(false);
   }, [lang]);
 
-  // 1. Capture the raw scene first (no text overlay)
+  // 1. Capture Logic: Use intermediate canvas to fix black screen & flip issues
   const handleCapture = useCallback(() => {
     const canvas = canvasRef.current;
     const video = videoRef.current;
     if (!canvas || !video) return;
 
+    const width = canvas.width;
+    const height = canvas.height;
+
+    // Create a temporary canvas for the un-mirrored composition
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = width;
+    tempCanvas.height = height;
+    const tCtx = tempCanvas.getContext('2d');
+    if (!tCtx) return;
+
+    // A. Draw Video Background (Unmirrored first to handle crop correctly)
+    if (bgMode === BackgroundMode.Camera && video.videoWidth) {
+        // Calculate "object-cover" crop metrics
+        const scale = Math.max(width / video.videoWidth, height / video.videoHeight);
+        const sw = video.videoWidth * scale;
+        const sh = video.videoHeight * scale;
+        const ox = (width - sw) / 2;
+        const oy = (height - sh) / 2;
+        
+        tCtx.drawImage(video, ox, oy, sw, sh);
+    } else {
+        drawArtisticBackground(tCtx, width, height, biome);
+    }
+
+    // B. Draw AR Layer (Unmirrored)
+    // The canvas itself has CSS scaleX(-1), but its internal buffer is standard.
+    // Drawing it directly to tempCanvas (standard) preserves the buffer content.
+    tCtx.drawImage(canvas, 0, 0);
+
+    // C. Flip the result onto the final scene canvas
     const sceneCanvas = document.createElement('canvas');
-    sceneCanvas.width = canvas.width;
-    sceneCanvas.height = canvas.height;
+    sceneCanvas.width = width;
+    sceneCanvas.height = height;
     const sCtx = sceneCanvas.getContext('2d');
     if (!sCtx) return;
 
-    // Draw Video & AR layers with correct aspect ratio handling
-    if (bgMode === BackgroundMode.Camera) {
-      const videoWidth = video.videoWidth;
-      const videoHeight = video.videoHeight;
-      
-      if (videoWidth && videoHeight) {
-        // Match object-cover logic
-        const scale = Math.max(canvas.width / videoWidth, canvas.height / videoHeight);
-        const scaledWidth = videoWidth * scale;
-        const scaledHeight = videoHeight * scale;
-        const xOffset = (canvas.width - scaledWidth) / 2;
-        const yOffset = (canvas.height - scaledHeight) / 2;
-
-        sCtx.save();
-        // Since the canvas has scale-x[-1], we need to replicate this mirroring for the capture
-        // Origin moves to top-right
-        sCtx.scale(-1, 1);
-        // Because of the flip, drawing at xOffset needs to be adjusted relative to the new origin
-        // Or we can just draw normally and flip the whole context.
-        // If we scale(-1, 1), x=0 becomes right edge. x=-width becomes left edge.
-        // We want to draw the image centered.
-        // If xOffset is -50 (clipped 50px on left), we want to draw at x=-50 relative to visual left.
-        // With scale(-1,1), visual left is logical -width.
-        // So we draw at -(width - xOffset) ?
-        
-        // Simpler approach: Draw normally to a temp canvas, then draw temp canvas flipped.
-        // But let's try to get the coordinates right.
-        // Canvas transform: scale(-1, 1).
-        // Logical X: 0 is Visual Right. Logical Width is Visual Left.
-        // We want the video to appear mirrored.
-        // The standard webcam stream is NOT mirrored.
-        // We want it to look like a mirror.
-        // So we draw the stream normally, but scale(-1, 1).
-        // The destination rectangle should be centered.
-        // xOffset is usually negative (if cropped).
-        // Rect: [xOffset, yOffset, scaledWidth, scaledHeight].
-        // If we apply scale(-1, 1), we need to draw at [- (xOffset + scaledWidth), yOffset].
-        // Let's verify:
-        // xOffset = -100. scaledWidth = 1000.
-        // x = -(-100 + 1000) = -900.
-        // Width = 1000.
-        // Draws from -900 to 100.
-        // Visual output (flipped): 
-        // Logical -900 -> Visual 900 (assuming origin at visual right?? No origin is 0,0).
-        // If transform-origin is 0,0 (default):
-        // Logical x -> Visual -x.
-        // If we draw at -900, it appears at Visual 900.
-        // We want it centered. If canvas width is 800.
-        // Visual center is 400.
-        // We want visual range -100 to 900 (centered 800).
-        // So we need logical x such that -x is centered?
-        // No, standard `scale(-1, 1)` mirrors around x=0 axis.
-        // If we want to mirror the image inside the canvas:
-        // translate(width, 0); scale(-1, 1);
-        // Then Logical 0 -> Visual Width. Logical Width -> Visual 0.
-        // xOffset (e.g. -100) -> Visual Width - (-100) = Width + 100. (Wrong side).
-        // xOffset + scaledWidth (-100 + 1000 = 900) -> Visual Width - 900 = -100. (Visual Left).
-        // So drawing at xOffset should work if we translate first.
-        
-        sCtx.translate(sceneCanvas.width, 0);
-        sCtx.scale(-1, 1);
-        sCtx.drawImage(video, xOffset, yOffset, scaledWidth, scaledHeight);
-        sCtx.restore();
-      }
-    } else {
-      drawArtisticBackground(sCtx, sceneCanvas.width, sceneCanvas.height, biome);
-    }
-    sCtx.save();
+    // Apply horizontal flip to match the "Selfie Mirror" effect seen on screen
+    sCtx.translate(width, 0);
     sCtx.scale(-1, 1);
-    sCtx.drawImage(canvas, -sceneCanvas.width, 0, sceneCanvas.width, sceneCanvas.height);
-    sCtx.restore();
+    sCtx.drawImage(tempCanvas, 0, 0);
 
     setRawCapture(sceneCanvas);
     setActiveFrameId('classic');
