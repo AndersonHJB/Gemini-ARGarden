@@ -118,35 +118,62 @@ function App() {
       try {
         await visionService.initialize();
 
+        let stream: MediaStream | null = null;
         const savedCameraId = localStorage.getItem(CAMERA_STORAGE_KEY);
-        let stream;
+        
+        // Helper to attempt stream acquisition
+        const attemptStream = async (constraints: MediaStreamConstraints) => {
+           try {
+             return await navigator.mediaDevices.getUserMedia(constraints);
+           } catch (e) {
+             console.warn("Stream attempt failed:", constraints, e);
+             return null;
+           }
+        };
 
-        try {
-          if (savedCameraId) {
-             stream = await navigator.mediaDevices.getUserMedia({
-              video: { 
-                deviceId: { exact: savedCameraId },
-                width: { ideal: 1280 }, 
-                height: { ideal: 720 } 
-              }
+        // Strategy 1: Saved Camera (Ideal Config)
+        if (savedCameraId) {
+             stream = await attemptStream({
+                video: { 
+                  deviceId: { exact: savedCameraId },
+                  width: { ideal: 1280 }, 
+                  height: { ideal: 720 } 
+                }
+             });
+        }
+
+        // Strategy 2: User Facing (Ideal Config)
+        if (!stream) {
+            stream = await attemptStream({
+               video: { 
+                 facingMode: 'user', 
+                 width: { ideal: 1280 }, 
+                 height: { ideal: 720 } 
+               }
             });
-          } else {
-             throw new Error("No saved camera");
-          }
-        } catch (e) {
-          stream = await navigator.mediaDevices.getUserMedia({
-            video: { 
-              facingMode: 'user', 
-              width: { ideal: 1280 }, 
-              height: { ideal: 720 } 
-            }
-          });
+        }
+
+        // Strategy 3: User Facing (Basic Config - Fixes Android WeChat issues)
+        if (!stream) {
+            stream = await attemptStream({
+               video: { facingMode: 'user' }
+            });
+        }
+
+        // Strategy 4: Any Video (Last Resort)
+        if (!stream) {
+            stream = await attemptStream({ video: true });
+        }
+
+        if (!stream) {
+           throw new Error("Unable to acquire camera stream");
         }
 
         currentStreamRef.current = stream;
         
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
+          // Explicitly call play to ensure iOS/WeChat playback
           videoRef.current.onloadedmetadata = () => {
             videoRef.current?.play().catch(e => console.error("Play error:", e));
             if (!requestRef.current) {
@@ -172,9 +199,8 @@ function App() {
 
       } catch (err) {
         console.error("Initialization failed:", err);
-        alert(lang === 'CN' 
-          ? "无法启动相机，请确保允许访问摄像头权限。\n如果是iOS，请使用Safari浏览器并添加到主屏幕使用。" 
-          : "Unable to start camera. Please ensure permissions are granted.\nUse Safari on iOS.");
+        // Simplified bilingual alert without dependency on state
+        alert("无法启动相机 / Camera Failed\n\n1. 请检查权限 / Check Permissions\n2. Android微信请尝试在浏览器打开 / Try external browser\n3. iOS请使用Safari");
       }
     };
 
@@ -200,13 +226,26 @@ function App() {
         if (currentStreamRef.current) {
           currentStreamRef.current.getTracks().forEach(t => t.stop());
         }
-        const stream = await navigator.mediaDevices.getUserMedia({
+        
+        // Use simpler constraints for switching as well to be safe
+        const constraints = {
           video: { 
             deviceId: { exact: selectedCamera }, 
             width: { ideal: 1280 }, 
             height: { ideal: 720 } 
           }
-        });
+        };
+
+        let stream;
+        try {
+           stream = await navigator.mediaDevices.getUserMedia(constraints);
+        } catch(e) {
+           // Fallback if strict constraints fail on switch
+           stream = await navigator.mediaDevices.getUserMedia({
+             video: { deviceId: { exact: selectedCamera } }
+           });
+        }
+
         currentStreamRef.current = stream;
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
@@ -1057,7 +1096,15 @@ function App() {
           ref={videoRef} 
           style={{ transform: `scaleX(-1)`, visibility: bgMode === BackgroundMode.Camera ? 'visible' : 'hidden' }}
           className="absolute inset-0 w-full h-full object-cover" 
-          playsInline muted autoPlay
+          playsInline
+          muted
+          autoPlay
+          {...{ 
+            "webkit-playsinline": "true",
+            "x5-playsinline": "true",
+            "x5-video-player-type": "h5-page",
+            "x5-video-player-fullscreen": "true"
+          }}
         />
         <canvas ref={canvasRef} className="absolute inset-0 w-full h-full transform scale-x-[-1] pointer-events-none" />
 
