@@ -101,6 +101,11 @@ function App() {
   useEffect(() => { windStrengthRef.current = windStrength; }, [windStrength]);
   useEffect(() => { bgModeRef.current = bgMode; }, [bgMode]);
 
+  //ZF: Check for mobile device
+  const isMobileDevice = useCallback(() => {
+    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+  }, []);
+
   // Auto-Save Garden Data Periodically
   useEffect(() => {
     const saveInterval = setInterval(() => {
@@ -135,45 +140,50 @@ function App() {
 
         let stream: MediaStream | null = null;
         const savedCameraId = localStorage.getItem(CAMERA_STORAGE_KEY);
+        const isMobile = isMobileDevice();
         
-        // Helper to attempt stream acquisition
-        const attemptStream = async (constraints: MediaStreamConstraints) => {
+        // Helper to attempt stream acquisition with adaptive strategy
+        const attemptStream = async (baseConstraints: MediaTrackConstraints) => {
+           // 1. Adaptive Constraints
+           const constraints: MediaStreamConstraints = {
+             video: { ...baseConstraints }
+           };
+
+           // IMPORTANT: iOS/Mobile WeChat often blacks out if specific resolutions are forced.
+           // However, Desktop needs specific resolutions for HD quality.
+           if (!isMobile) {
+             (constraints.video as MediaTrackConstraints).width = { ideal: 1280 };
+             (constraints.video as MediaTrackConstraints).height = { ideal: 720 };
+           }
+
            try {
              return await navigator.mediaDevices.getUserMedia(constraints);
            } catch (e) {
-             console.warn("Stream attempt failed:", constraints, e);
-             return null;
+             console.warn("Preferred stream failed, retrying with minimal constraints...", e);
+             
+             // 2. Fallback: Try absolute minimum constraints if preferred failed
+             try {
+                return await navigator.mediaDevices.getUserMedia({ video: baseConstraints });
+             } catch (e2) {
+                console.warn("Basic stream failed", e2);
+                return null;
+             }
            }
         };
 
-        // iOS WeChat Optimization:
-        // Do NOT request specific high resolutions (1280x720) initially. 
-        // iOS Webview often fails with high res constraints or takes forever to load.
-        // Letting the browser choose the default (usually 640x480) is much faster and stable.
-
-        // Strategy 1: Saved Camera (Relaxed constraints)
+        // Strategy 1: Saved Camera
         if (savedCameraId) {
-             stream = await attemptStream({
-                video: { 
-                  deviceId: { exact: savedCameraId },
-                  // Removed width/height constraints for stability on iOS WeChat
-                }
-             });
+             stream = await attemptStream({ deviceId: { exact: savedCameraId } });
         }
 
-        // Strategy 2: User Facing (Default Config - Best for WeChat)
+        // Strategy 2: User Facing (Default Config)
         if (!stream) {
-            stream = await attemptStream({
-               video: { 
-                 facingMode: 'user'
-                 // Removed width/height constraints
-               }
-            });
+            stream = await attemptStream({ facingMode: 'user' });
         }
 
-        // Strategy 3: Any Video (Last Resort)
+        // Strategy 3: Any Video (Last Resort - Empty constraints = browser default)
         if (!stream) {
-            stream = await attemptStream({ video: true });
+            stream = await attemptStream({});
         }
 
         if (!stream) {
@@ -243,18 +253,25 @@ function App() {
           currentStreamRef.current.getTracks().forEach(t => t.stop());
         }
         
-        // Simpler constraints for switching too
-        const constraints = {
-          video: { 
-            deviceId: { exact: selectedCamera }
-            // Removed resolution constraints
-          }
+        const isMobile = isMobileDevice();
+        
+        // Construct constraints
+        const constraints: MediaStreamConstraints = {
+            video: { deviceId: { exact: selectedCamera } }
         };
+
+        // Add HD preference only for desktop
+        if (!isMobile) {
+            (constraints.video as MediaTrackConstraints).width = { ideal: 1280 };
+            (constraints.video as MediaTrackConstraints).height = { ideal: 720 };
+        }
 
         let stream;
         try {
            stream = await navigator.mediaDevices.getUserMedia(constraints);
         } catch(e) {
+           console.warn("Switch HD failed, trying basic", e);
+           // Fallback to basic constraint without resolution
            stream = await navigator.mediaDevices.getUserMedia({
              video: { deviceId: { exact: selectedCamera } }
            });
