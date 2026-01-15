@@ -112,6 +112,21 @@ function App() {
     return () => clearInterval(saveInterval);
   }, []);
 
+  // Handle global touch to force play video on iOS/WeChat if blocked
+  useEffect(() => {
+    const unlockVideo = () => {
+      if (videoRef.current && videoRef.current.paused && currentStreamRef.current) {
+        videoRef.current.play().catch(e => console.log("Touch resume failed", e));
+      }
+    };
+    window.addEventListener('touchstart', unlockVideo, { passive: true });
+    window.addEventListener('click', unlockVideo, { passive: true });
+    return () => {
+      window.removeEventListener('touchstart', unlockVideo);
+      window.removeEventListener('click', unlockVideo);
+    }
+  }, []);
+
   // Initial Setup: Permissions -> Stream -> Vision -> Devices
   useEffect(() => {
     const init = async () => {
@@ -131,36 +146,32 @@ function App() {
            }
         };
 
-        // Strategy 1: Saved Camera (Ideal Config)
+        // iOS WeChat Optimization:
+        // Do NOT request specific high resolutions (1280x720) initially. 
+        // iOS Webview often fails with high res constraints or takes forever to load.
+        // Letting the browser choose the default (usually 640x480) is much faster and stable.
+
+        // Strategy 1: Saved Camera (Relaxed constraints)
         if (savedCameraId) {
              stream = await attemptStream({
                 video: { 
                   deviceId: { exact: savedCameraId },
-                  width: { ideal: 1280 }, 
-                  height: { ideal: 720 } 
+                  // Removed width/height constraints for stability on iOS WeChat
                 }
              });
         }
 
-        // Strategy 2: User Facing (Ideal Config)
+        // Strategy 2: User Facing (Default Config - Best for WeChat)
         if (!stream) {
             stream = await attemptStream({
                video: { 
-                 facingMode: 'user', 
-                 width: { ideal: 1280 }, 
-                 height: { ideal: 720 } 
+                 facingMode: 'user'
+                 // Removed width/height constraints
                }
             });
         }
 
-        // Strategy 3: User Facing (Basic Config - Fixes Android WeChat issues)
-        if (!stream) {
-            stream = await attemptStream({
-               video: { facingMode: 'user' }
-            });
-        }
-
-        // Strategy 4: Any Video (Last Resort)
+        // Strategy 3: Any Video (Last Resort)
         if (!stream) {
             stream = await attemptStream({ video: true });
         }
@@ -173,13 +184,18 @@ function App() {
         
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
-          // Explicitly call play to ensure iOS/WeChat playback
+          // Explicitly call play immediately for iOS
+          videoRef.current.play().catch(e => {
+            console.warn("Autoplay blocked, waiting for interaction", e);
+          });
+          
           videoRef.current.onloadedmetadata = () => {
-            videoRef.current?.play().catch(e => console.error("Play error:", e));
-            if (!requestRef.current) {
+             // Second attempt to play inside metadata load
+             videoRef.current?.play().catch(e => console.error("Play error:", e));
+             if (!requestRef.current) {
                lastTimeRef.current = performance.now();
                requestRef.current = requestAnimationFrame(animate);
-            }
+             }
           };
         }
 
@@ -227,12 +243,11 @@ function App() {
           currentStreamRef.current.getTracks().forEach(t => t.stop());
         }
         
-        // Use simpler constraints for switching as well to be safe
+        // Simpler constraints for switching too
         const constraints = {
           video: { 
-            deviceId: { exact: selectedCamera }, 
-            width: { ideal: 1280 }, 
-            height: { ideal: 720 } 
+            deviceId: { exact: selectedCamera }
+            // Removed resolution constraints
           }
         };
 
@@ -240,7 +255,6 @@ function App() {
         try {
            stream = await navigator.mediaDevices.getUserMedia(constraints);
         } catch(e) {
-           // Fallback if strict constraints fail on switch
            stream = await navigator.mediaDevices.getUserMedia({
              video: { deviceId: { exact: selectedCamera } }
            });
