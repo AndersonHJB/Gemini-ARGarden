@@ -3,7 +3,7 @@ import { visionService } from './services/visionService';
 import { analyzeGarden, getRandomMessage } from './services/geminiService';
 import { StatusPanel, WorldControls } from './components/Controls';
 import { BiomeTheme, BIOME_COLORS, Flower, FlowerSpecies, Point, Seed, Particle, BackgroundMode, ARTISTIC_BG } from './types';
-import {MdAutoAwesome, MdDownload, MdClose, MdCheck} from "react-icons/md";
+import {MdAutoAwesome, MdDownload, MdClose, MdCheck, MdCameraAlt} from "react-icons/md";
 
 // Refined detection constants for high responsiveness
 const PINCH_THRESHOLD_START = 0.045; 
@@ -1110,8 +1110,6 @@ function App() {
       setRawCapture(null);
   };
 
-  const reflectionsBtnText = lang === 'CN' ? "花园感悟" : "GARDEN REFLECTIONS";
-  const reflectionsLoadingText = lang === 'CN' ? "正在感悟生命..." : "CONSULTING SPIRITS...";
   const reflectionsCloseText = lang === 'CN' ? "关闭感悟" : "CLOSE VISION";
   const capturedMemoryText = lang === 'CN' ? "记忆已定格" : "MEMORY CAPTURED";
   const downloadBtnText = lang === 'CN' ? "保存卡片" : "SAVE CARD";
@@ -1152,37 +1150,20 @@ function App() {
           windStrength={windStrength} setWindStrength={setWindStrengthState}
           cameras={cameras} selectedCamera={selectedCamera} setSelectedCamera={setSelectedCamera}
           bgMode={bgMode} setBgMode={setBgMode}
-          onCapture={handleCapture}
           onClearGarden={handleClearGarden}
+          onAnalyze={handleAnalyze}
+          isAnalyzing={isAnalyzing}
           lang={lang} setLang={setLang}
         />
 
-        {/* Updated "Garden Reflections" Button for Mobile Responsiveness */}
-        <div className="absolute bottom-6 right-6 sm:bottom-8 sm:right-8 z-20 flex flex-col items-end pointer-events-none">
-          <button 
-            onClick={(e) => { e.stopPropagation(); handleAnalyze(); }} 
-            disabled={isAnalyzing}
-            className={`
-              pointer-events-auto
-              relative groupqp flex items-center justify-center 
-              bg-black/60 backdrop-blur-xl border border-white/10 text-white 
-              shadow-2xl transition-all duration-300 ease-out
-              active:scale-95 disabled:opacity-50
-              hover:bg-white/10 hover:border-white/30 hover:shadow-[0_0_20px_rgba(236,72,153,0.3)]
-              ${isAnalyzing 
-                ? 'px-6 py-3 rounded-2xl gap-3 w-auto' // Loading state: expanded pill
-                : 'w-14 h-14 rounded-full sm:w-auto sm:h-auto sm:px-6 sm:py-3 sm:rounded-2xl sm:gap-3' // Default: Circle on mobile, Pill on desktop
-              }
-            `}
+        {/* Bottom Right Single Action Button: Shutter Style */}
+        <div className="absolute bottom-10 right-1/2 translate-x-1/2 sm:translate-x-0 sm:right-10 z-20 pointer-events-none">
+          <button
+            onClick={(e) => { e.stopPropagation(); handleCapture(); }}
+            className="pointer-events-auto w-20 h-20 sm:w-24 sm:h-24 rounded-full border-4 border-white/40 p-1.5 bg-black/10 backdrop-blur-sm shadow-[0_0_40px_rgba(0,0,0,0.3)] transition-all active:scale-90 hover:bg-white/20 group"
+            title={lang === 'CN' ? '拍摄' : 'Capture'}
           >
-            <MdAutoAwesome className={`text-xl text-pink-400 shrink-0 ${isAnalyzing ? "animate-spin" : "group-hover:rotate-12 transition-transform"}`} />
-            
-            <span className={`
-              font-bold text-[10px] tracking-[0.2em] uppercase whitespace-nowrap
-              ${isAnalyzing ? 'block' : 'hidden sm:block'}
-            `}>
-              {isAnalyzing ? reflectionsLoadingText : reflectionsBtnText}
-            </span>
+            <div className="w-full h-full bg-white rounded-full shadow-inner group-hover:scale-95 transition-transform duration-200" />
           </button>
         </div>
 

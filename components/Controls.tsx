@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { BiomeTheme, BIOME_COLORS, FlowerSpecies, BackgroundMode } from '../types';
 import { twMerge } from 'tailwind-merge';
-import { MdCameraAlt, MdBrush, MdVideocam, MdSettings, MdClose, MdDeleteSweep, MdLanguage } from "react-icons/md";
+import { MdCameraAlt, MdBrush, MdVideocam, MdSettings, MdClose, MdDeleteSweep, MdLanguage, MdAutoAwesome } from "react-icons/md";
 
 interface StatusPanelProps {
   isPinching: boolean;
@@ -33,8 +33,9 @@ interface WorldControlsProps {
   setSelectedCamera: (id: string) => void;
   bgMode: BackgroundMode;
   setBgMode: (m: BackgroundMode) => void;
-  onCapture: () => void;
   onClearGarden: () => void;
+  onAnalyze: () => void;
+  isAnalyzing: boolean;
   lang: 'CN' | 'EN';
   setLang: (l: 'CN' | 'EN') => void;
 }
@@ -45,7 +46,8 @@ const UI_STRINGS = {
     MOUTH: "张嘴：生长",
     CLEARING: "正在清理...",
     SETTINGS: "花园设置",
-    CAPTURE: "拍摄",
+    REFLECTIONS: "花园感悟",
+    ANALYZING: "感悟中...",
     CLEAR: "清除",
     GROWTH_SCALE: "世界生长比例",
     GROWTH_SPEED: "生长活力",
@@ -67,7 +69,8 @@ const UI_STRINGS = {
     MOUTH: "MOUTH: GROW",
     CLEARING: "CLEARING...",
     SETTINGS: "GARDEN SETTINGS",
-    CAPTURE: "CAPTURE",
+    REFLECTIONS: "REFLECTIONS",
+    ANALYZING: "THINKING...",
     CLEAR: "CLEAR",
     GROWTH_SCALE: "World Growth Scale",
     GROWTH_SPEED: "Growth Vigor",
@@ -149,7 +152,7 @@ export const WorldControls: React.FC<WorldControlsProps> = ({
   growthHeight, setGrowthHeight, growthSpeed, setGrowthSpeed, petalScale, setPetalScale,
   windStrength, setWindStrength,
   cameras, selectedCamera, setSelectedCamera, bgMode, setBgMode, 
-  onCapture, onClearGarden, lang, setLang
+  onClearGarden, onAnalyze, isAnalyzing, lang, setLang
 }) => {
   const t = UI_STRINGS[lang];
   const [visitCount, setVisitCount] = useState<number | null>(null);
@@ -205,10 +208,12 @@ export const WorldControls: React.FC<WorldControlsProps> = ({
 
         <div className="flex gap-2 mb-6">
            <button 
-            onClick={onCapture}
-            className="flex-1 flex items-center justify-center gap-2 py-3 bg-pink-500 hover:bg-pink-600 rounded-xl transition-all font-bold text-[9px] tracking-widest uppercase shadow-[0_0_15px_rgba(236,72,153,0.3)]"
+            onClick={onAnalyze}
+            disabled={isAnalyzing}
+            className="flex-1 flex items-center justify-center gap-2 py-3 bg-purple-600/30 hover:bg-purple-600/50 border border-purple-500/30 rounded-xl transition-all font-bold text-[9px] tracking-widest uppercase shadow-[0_0_15px_rgba(168,85,247,0.2)] disabled:opacity-50"
           >
-            <MdCameraAlt className="text-sm" /> {t.CAPTURE}
+            <MdAutoAwesome className={isAnalyzing ? "animate-spin text-sm" : "text-sm"} /> 
+            {isAnalyzing ? t.ANALYZING : t.REFLECTIONS}
           </button>
           <button 
             onClick={() => { onClearGarden(); setIsOpen(false); }}
