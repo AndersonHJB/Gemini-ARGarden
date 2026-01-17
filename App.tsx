@@ -66,6 +66,7 @@ function App() {
   const bgModeRef = useRef<BackgroundMode>(BackgroundMode.Camera);
 
   const [loaded, setLoaded] = useState(false);
+  const [videoReady, setVideoReady] = useState(false); // New state to prevent resizing glitch
   const [lang, setLang] = useState<'CN' | 'EN'>('CN');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [cameras, setCameras] = useState<MediaDeviceInfo[]>([]);
@@ -202,6 +203,7 @@ function App() {
           videoRef.current.onloadedmetadata = () => {
              // Second attempt to play inside metadata load
              videoRef.current?.play().catch(e => console.error("Play error:", e));
+             setVideoReady(true); // Signal that video dimensions are known
              if (!requestRef.current) {
                lastTimeRef.current = performance.now();
                requestRef.current = requestAnimationFrame(animate);
@@ -248,6 +250,7 @@ function App() {
     if (activeTrack?.getSettings().deviceId === selectedCamera) return;
 
     const switchCamera = async () => {
+      setVideoReady(false); // Hide video during switch
       try {
         if (currentStreamRef.current) {
           currentStreamRef.current.getTracks().forEach(t => t.stop());
@@ -1124,7 +1127,7 @@ function App() {
         <video 
           ref={videoRef} 
           style={{ transform: `scaleX(-1)`, visibility: bgMode === BackgroundMode.Camera ? 'visible' : 'hidden' }}
-          className="absolute inset-0 w-full h-full object-cover" 
+          className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-700 ease-out ${videoReady ? 'opacity-100' : 'opacity-0'}`}
           playsInline
           muted
           autoPlay
@@ -1223,7 +1226,7 @@ function App() {
           </div>
         )}
 
-        {!loaded && (
+        {(!loaded || !videoReady) && (
            <div className="absolute inset-0 bg-black flex flex-col items-center justify-center text-white z-50">
              <div className="w-16 h-16 border-2 border-white/5 border-t-pink-500 rounded-full animate-spin mb-6"></div>
              <p className="tracking-[0.8em] text-[10px] font-black text-white/40 uppercase">{lang === 'CN' ? '唤醒自然中' : 'Awakening Nature'}</p>
