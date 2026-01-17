@@ -15,6 +15,7 @@ const FIST_CLEAR_SECONDS = 2.0;
 const FIST_GRACE_FRAMES = 12;
 const CAMERA_STORAGE_KEY = 'gemini_ar_garden_camera_id';
 const GARDEN_DATA_KEY = 'gemini_ar_garden_flowers_data';
+const MUSIC_URL = "https://cdn.bornforthis.cn/mp3/%E8%8A%B1%E5%9B%AD%E7%A7%8D%E8%8A%B1.MP3";
 
 // Frame Styles Configuration - "ONE" Style
 const FRAME_STYLES = [
@@ -38,6 +39,7 @@ const loadSavedFlowers = (): Flower[] => {
 function App() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const audioRef = useRef<HTMLAudioElement>(null);
   const requestRef = useRef<number | null>(null);
   const currentStreamRef = useRef<MediaStream | null>(null);
   
@@ -88,6 +90,7 @@ function App() {
 
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<string | null>(null);
+  const [isMusicPlaying, setIsMusicPlaying] = useState(true);
   
   // Capture Logic States
   const [rawCapture, setRawCapture] = useState<HTMLCanvasElement | null>(null);
@@ -118,20 +121,58 @@ function App() {
     return () => clearInterval(saveInterval);
   }, []);
 
-  // Handle global touch to force play video on iOS/WeChat if blocked
+  // Music Initialization & Auto-play
   useEffect(() => {
-    const unlockVideo = () => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    
+    audio.loop = true;
+    
+    // Attempt auto-play
+    audio.play().then(() => {
+        setIsMusicPlaying(true);
+    }).catch(e => {
+        console.warn("Audio autoplay blocked, waiting for interaction", e);
+        setIsMusicPlaying(false);
+    });
+  }, []);
+
+  const toggleMusic = () => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (audio.paused) {
+      audio.play().catch(e => console.error("Audio play failed", e));
+      setIsMusicPlaying(true);
+    } else {
+      audio.pause();
+      setIsMusicPlaying(false);
+    }
+  };
+
+  // Handle global touch to force play video AND AUDIO on iOS/WeChat if blocked
+  useEffect(() => {
+    const unlockMedia = () => {
       if (videoRef.current && videoRef.current.paused && currentStreamRef.current) {
-        videoRef.current.play().catch(e => console.log("Touch resume failed", e));
+        videoRef.current.play().catch(e => console.log("Touch resume video failed", e));
+      }
+      
+      // Try to unlock audio if it was supposed to be playing but is paused (blocked)
+      // We check `isMusicPlaying` (desired state) vs `audio.paused` (actual state)
+      // Note: If user explicitly paused (isMusicPlaying === false), we don't force play.
+      // But for initial load where isMusicPlaying defaults to true but autoplay failed, this will fix it.
+      if (audioRef.current && audioRef.current.paused && isMusicPlaying) {
+          audioRef.current.play().then(() => {
+             // Successfully unlocked
+          }).catch(e => console.log("Touch resume audio failed", e));
       }
     };
-    window.addEventListener('touchstart', unlockVideo, { passive: true });
-    window.addEventListener('click', unlockVideo, { passive: true });
+    window.addEventListener('touchstart', unlockMedia, { passive: true });
+    window.addEventListener('click', unlockMedia, { passive: true });
     return () => {
-      window.removeEventListener('touchstart', unlockVideo);
-      window.removeEventListener('click', unlockVideo);
+      window.removeEventListener('touchstart', unlockMedia);
+      window.removeEventListener('click', unlockMedia);
     }
-  }, []);
+  }, [isMusicPlaying]);
 
   // Initial Setup: Permissions -> Stream -> Vision -> Devices
   useEffect(() => {
@@ -1139,6 +1180,7 @@ function App() {
           }}
         />
         <canvas ref={canvasRef} className="absolute inset-0 w-full h-full transform scale-x-[-1] pointer-events-none" />
+        <audio ref={audioRef} src={MUSIC_URL} loop />
 
         <StatusPanel {...uiState} lang={lang} />
         <WorldControls 
@@ -1157,6 +1199,8 @@ function App() {
           onAnalyze={handleAnalyze}
           isAnalyzing={isAnalyzing}
           lang={lang} setLang={setLang}
+          isMusicPlaying={isMusicPlaying}
+          onToggleMusic={toggleMusic}
         />
 
         {/* Bottom Right Capture Button */}

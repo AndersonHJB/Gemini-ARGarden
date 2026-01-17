@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { BiomeTheme, BIOME_COLORS, FlowerSpecies, BackgroundMode } from '../types';
 import { twMerge } from 'tailwind-merge';
-import { MdCameraAlt, MdBrush, MdVideocam, MdSettings, MdClose, MdDeleteSweep, MdLanguage, MdAutoAwesome } from "react-icons/md";
+import { MdCameraAlt, MdBrush, MdVideocam, MdSettings, MdClose, MdDeleteSweep, MdLanguage, MdAutoAwesome, MdMusicNote, MdMusicOff } from "react-icons/md";
 
 interface StatusPanelProps {
   isPinching: boolean;
@@ -38,6 +38,8 @@ interface WorldControlsProps {
   isAnalyzing: boolean;
   lang: 'CN' | 'EN';
   setLang: (l: 'CN' | 'EN') => void;
+  isMusicPlaying: boolean;
+  onToggleMusic: () => void;
 }
 
 const UI_STRINGS = {
@@ -152,7 +154,8 @@ export const WorldControls: React.FC<WorldControlsProps> = ({
   growthHeight, setGrowthHeight, growthSpeed, setGrowthSpeed, petalScale, setPetalScale,
   windStrength, setWindStrength,
   cameras, selectedCamera, setSelectedCamera, bgMode, setBgMode, 
-  onClearGarden, onAnalyze, isAnalyzing, lang, setLang
+  onClearGarden, onAnalyze, isAnalyzing, lang, setLang,
+  isMusicPlaying, onToggleMusic
 }) => {
   const t = UI_STRINGS[lang];
   const [visitCount, setVisitCount] = useState<number | null>(null);
@@ -178,12 +181,20 @@ export const WorldControls: React.FC<WorldControlsProps> = ({
   return (
     <>
       {!isOpen && (
-        <button 
-          onClick={(e) => { e.stopPropagation(); setIsOpen(true); }}
-          className="absolute top-6 right-6 w-12 h-12 bg-black/60 backdrop-blur-xl rounded-full flex items-center justify-center border border-white/10 shadow-2xl z-20 hover:bg-white/10 transition-all active:scale-90"
-        >
-          <MdSettings className="text-xl text-white" />
-        </button>
+        <div className="absolute top-6 right-6 flex flex-col gap-3 z-20">
+          <button 
+            onClick={(e) => { e.stopPropagation(); onToggleMusic(); }}
+            className="w-12 h-12 bg-black/60 backdrop-blur-xl rounded-full flex items-center justify-center border border-white/10 shadow-2xl hover:bg-white/10 transition-all active:scale-90"
+          >
+            {isMusicPlaying ? <MdMusicNote className="text-xl text-pink-400" /> : <MdMusicOff className="text-xl text-gray-400" />}
+          </button>
+          <button 
+            onClick={(e) => { e.stopPropagation(); setIsOpen(true); }}
+            className="w-12 h-12 bg-black/60 backdrop-blur-xl rounded-full flex items-center justify-center border border-white/10 shadow-2xl hover:bg-white/10 transition-all active:scale-90"
+          >
+            <MdSettings className="text-xl text-white" />
+          </button>
+        </div>
       )}
 
       <div 
