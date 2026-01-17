@@ -1128,7 +1128,7 @@ function App() {
         const brandY = CARD_HEIGHT - 70;
         ctx.fillStyle = frameStyle.accent;
         ctx.font = 'bold 32px "Inter", sans-serif';
-        ctx.fillText('GEMINI AR GARDEN', CARD_WIDTH / 2, brandY - 40);
+        ctx.fillText('Fingertip Garden', CARD_WIDTH / 2, brandY - 40);
         
         ctx.fillStyle = frameStyle.sub;
         ctx.font = 'normal 16px "Inter", sans-serif';
