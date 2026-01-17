@@ -1159,14 +1159,14 @@ function App() {
           lang={lang} setLang={setLang}
         />
 
-        {/* Bottom Right Single Action Button: Shutter Style */}
-        <div className="absolute bottom-10 right-1/2 translate-x-1/2 sm:translate-x-0 sm:right-10 z-20 pointer-events-none">
+        {/* Bottom Right Capture Button */}
+        <div className="absolute bottom-8 right-6 sm:bottom-10 sm:right-10 z-20 pointer-events-none">
           <button
             onClick={(e) => { e.stopPropagation(); handleCapture(); }}
-            className="pointer-events-auto w-20 h-20 sm:w-24 sm:h-24 rounded-full border-4 border-white/40 p-1.5 bg-black/10 backdrop-blur-sm shadow-[0_0_40px_rgba(0,0,0,0.3)] transition-all active:scale-90 hover:bg-white/20 group"
+            className="pointer-events-auto w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-white/20 backdrop-blur-xl border border-white/60 text-white flex items-center justify-center shadow-[0_0_30px_rgba(0,0,0,0.4)] hover:bg-white hover:text-black hover:scale-105 transition-all duration-300 active:scale-90"
             title={lang === 'CN' ? '拍摄' : 'Capture'}
           >
-            <div className="w-full h-full bg-white rounded-full shadow-inner group-hover:scale-95 transition-transform duration-200" />
+            <MdCameraAlt className="text-3xl sm:text-4xl drop-shadow-md" />
           </button>
         </div>
 
